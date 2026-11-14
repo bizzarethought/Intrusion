@@ -1,0 +1,157 @@
+/*
+ * Two voices, taken from the game's own art and story:
+ *   Nature  - the meadow. Petal-cream paper, leaf-shaped corners, moss ink,
+ *             the soft Fraunces serif. Used for everything the players do.
+ *   Machine - the intruder. Pure black, rose red, square corners, monospace,
+ *             scanlines. Used only where the AI shows itself: the watching
+ *             rose, the Turing check, the reveal.
+ */
+:root {
+  --moss: #10190f;
+  --soil: #22331c;
+  --leaf: #4f7a2e;
+  --sprout: #9bcb52;
+  --petal: #f3ecd8;
+  --petal-shade: #e3d8ba;
+  --rose: #e5303c;
+  --rose-deep: #8f0f1c;
+  --pond: #2a93c6;
+  --dandelion: #f2c230;
+  --accent: var(--leaf);
+
+  --display: 'Fraunces', 'Iowan Old Style', Georgia, serif;
+  --body: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --machine: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  --leaf-corners: 6px 26px 6px 26px;
+  --leaf-corners-small: 4px 16px 4px 16px;
+  --press: 4px 5px 0 var(--moss);
+  --space-1: 6px;
+  --space-2: 12px;
+  --space-3: 20px;
+  --space-4: 32px;
+  --fast: 120ms;
+  --medium: 300ms;
+  --slow: 700ms;
+}
+
+#root { position: fixed; inset: 0; z-index: 3; pointer-events: none; font-family: var(--body); font-size: 16px; color: var(--moss); }
+/* The UI floats over the game; only real controls catch the mouse, so clicks reach the grass. */
+.ui { pointer-events: auto; }
+#root * { box-sizing: border-box; }
+h1, h2, h3, p, ol, ul, table { margin: 0; }
+ol, ul { padding: 0; list-style: none; }
+h2 { font: 700 30px/1.1 var(--display); font-variation-settings: 'SOFT' 100; }
+h3 { font: 700 19px/1.2 var(--display); font-variation-settings: 'SOFT' 100; }
+p { line-height: 1.5; max-width: 62ch; }
+.muted { color: #5a6650; font-size: 14px; }
+.error { color: var(--rose-deep); font-weight: 700; }
+.kicker { font: 600 15px var(--display); font-style: italic; color: var(--leaf); }
+kbd { display: inline-block; min-width: 26px; padding: 2px 6px; margin-right: 3px; border-radius: 4px; border: 1.5px solid var(--moss); border-bottom-width: 3px; font: 700 12px var(--machine); text-align: center; background: #fff8e6; }
+
+/* Nature surface: a seed-packet card. */
+.panel {
+  background: var(--petal);
+  border: 2.5px solid var(--moss);
+  border-radius: var(--leaf-corners);
+  box-shadow: var(--press);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+}
+.panel--narrow { width: min(440px, calc(100vw - 32px)); }
+.panel--wide { width: min(880px, calc(100vw - 32px)); }
+.panel__header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+
+/* Machine surface: where the AI shows itself. */
+.machine {
+  background: #000 repeating-linear-gradient(0deg, transparent 0 3px, rgba(229, 48, 60, 0.09) 3px 4px);
+  color: #ffd9dc;
+  border: 2px solid var(--rose);
+  border-radius: 0;
+  box-shadow: 0 0 0 4px #000, 0 0 60px rgba(229, 48, 60, 0.45);
+  font-family: var(--machine);
+}
+.machine h2 { font: 700 30px/1.1 var(--machine); letter-spacing: -0.02em; color: var(--rose); }
+.machine .muted { color: #b9868a; }
+
+.button {
+  font: 700 16px var(--body);
+  color: var(--moss);
+  background: var(--petal);
+  border: 2.5px solid var(--moss);
+  border-radius: var(--leaf-corners-small);
+  padding: 11px 20px;
+  box-shadow: 3px 4px 0 var(--moss);
+  cursor: pointer;
+  position: relative;
+  transition: transform var(--fast), box-shadow var(--fast), background var(--fast);
+}
+.button:hover:not(:disabled) { background: #fffaf0; transform: translate(-1px, -1px); box-shadow: 4px 5px 0 var(--moss); }
+.button:active:not(:disabled) { transform: translate(3px, 4px); box-shadow: 0 0 0 var(--moss); }
+.button:disabled { opacity: 0.5; cursor: not-allowed; }
+.button--primary { background: var(--rose); color: #fff7ee; }
+.button--primary:hover:not(:disabled) { background: #f04652; }
+.button--danger { background: var(--rose-deep); color: #fff7ee; }
+.button--selected { background: var(--dandelion); }
+.button--big { font: 700 22px var(--display); font-variation-settings: 'SOFT' 100; padding: 14px 30px; }
+.button--small { font-size: 14px; padding: 7px 13px; }
+.button--icon { padding: 8px 11px; font-size: 17px; line-height: 1; }
+#root :focus-visible { outline: 3px solid var(--pond); outline-offset: 3px; }
+
+.field { display: flex; flex-direction: column; gap: var(--space-1); font-weight: 700; font-size: 14px; }
+input {
+  font: 500 17px var(--body);
+  color: var(--moss);
+  background: #fffaf0;
+  border: 2px solid var(--moss);
+  border-radius: 4px;
+  padding: 11px 13px;
+  width: 100%;
+}
+input::placeholder { color: #7a8470; }
+input:disabled { background: var(--petal-shade); }
+
+.row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; justify-content: space-between; }
+.divider { display: flex; align-items: center; gap: var(--space-2); color: #5a6650; font: italic 600 14px var(--display); }
+.divider::before, .divider::after { content: ''; flex: 1; border-top: 2px dashed #b9ae8c; }
+.status { display: flex; align-items: center; gap: 8px; min-height: 24px; font-size: 14px; color: #44503c; }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #9aa08c; flex: none; }
+.dot--on { background: var(--leaf); }
+.dot--off { background: var(--rose); }
+.dot--busy { background: var(--dandelion); animation: pulse 0.8s infinite; }
+.pill, .tag { border-radius: 999px; font-weight: 700; font-size: 12px; padding: 2px 9px; border: 1.5px solid var(--moss); background: #fffaf0; }
+.tag { margin-left: 6px; font-size: 11px; }
+.tag--you { background: var(--pond); color: #fff; border-color: var(--moss); }
+.tag--host { background: var(--dandelion); }
+.tag--out { background: var(--rose); color: #fff; }
+.badge { position: absolute; top: -8px; right: -8px; min-width: 20px; padding: 2px 5px; border-radius: 999px; background: var(--rose); color: #fff; font-size: 11px; font-weight: 800; }
+.note { font-size: 14px; padding: 10px 12px; border-left: 5px solid var(--dandelion); background: #fff3c4; }
+.result { font-weight: 700; color: #5a6650; }
+.result--done { color: var(--leaf); }
+.plain li { margin: 6px 0; font-size: 14px; }
+
+.sprite { display: inline-block; background-repeat: no-repeat; flex: none; }
+.sprite--fallback { border-radius: 50%; opacity: 0.6; transform: scale(0.5); }
+
+/* A player: portrait, name, and whatever the screen adds. */
+.card {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 6px 10px 10px; min-width: 116px;
+  background: var(--petal-shade); border: 2px solid var(--moss); border-radius: var(--leaf-corners-small);
+  color: var(--moss); font: inherit;
+  transition: transform var(--fast), background var(--fast);
+}
+button.card { cursor: pointer; box-shadow: 3px 4px 0 var(--moss); position: relative; }
+button.card:hover:not(:disabled) { background: #fffaf0; transform: translate(-1px, -2px); }
+button.card:disabled { cursor: not-allowed; opacity: 0.55; box-shadow: none; }
+.card--selected { background: #ffd7da; border-color: var(--rose-deep); }
+/* The accusation: a red stamp across the suspect. */
+.card--selected::after { content: 'accused'; position: absolute; top: 34%; left: 50%; translate: -50% -50%; rotate: -14deg; padding: 2px 10px; border: 3px solid var(--rose); color: var(--rose); font: 800 17px var(--machine); background: rgba(255, 247, 238, 0.88); }
+.card--out { opacity: 0.6; }
+.card__name { display: flex; align-items: center; font-weight: 700; max-width: 170px; }
+.card__name > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card__meta { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #44503c; }

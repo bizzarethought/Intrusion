@@ -1,0 +1,83 @@
+{
+ "level": "rlgl",
+ "image": "rlgl_bg.png",
+ "size": [
+  1920,
+  1080
+ ],
+ "pixels_per_meter": 259.46,
+ "camera_elevation_deg": 38,
+ "bot_height_px": 156,
+ "spawn_points": [
+  {
+   "px": [
+    447.6,
+    796.8
+   ],
+   "facing_deg": 3
+  },
+  {
+   "px": [
+    1335.8,
+    680.7
+   ],
+   "facing_deg": 11
+  },
+  {
+   "px": [
+    661.1,
+    721.2
+   ],
+   "facing_deg": -8
+  },
+  {
+   "px": [
+    633.8,
+    689.7
+   ],
+   "facing_deg": 8
+  },
+  {
+   "px": [
+    943.0,
+    638.8
+   ],
+   "facing_deg": -10
+  },
+  {
+   "px": [
+    1167.6,
+    592.7
+   ],
+   "facing_deg": -4
+  },
+  {
+   "px": [
+    837.7,
+    579.1
+   ],
+   "facing_deg": -6
+  },
+  {
+   "px": [
+    1273.6,
+    529.0
+   ],
+   "facing_deg": -2
+  },
+  {
+   "px": [
+    696.0,
+    509.4
+   ],
+   "facing_deg": -12
+  },
+  {
+   "px": [
+    1065.4,
+    485.4
+   ],
+   "facing_deg": 11
+  }
+ ]
+}

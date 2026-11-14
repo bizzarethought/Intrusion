@@ -4,35 +4,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Intrusion</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,400..900,0..100&display=swap" rel="stylesheet" />
     <style>
-      html, body { margin: 0; height: 100%; overflow: hidden; background: #9fd3f0; }
-      canvas { display: block; }
-      #title {
-        position: fixed; left: 0; right: 0; text-align: center; color: #fff;
-        font-family: ui-monospace, Menlo, Consolas, monospace;
-        pointer-events: none; opacity: 0; transition: opacity 1s;
-      }
-      #title {
-        top: 36%; margin: 0; padding-left: 0.18em;
-        font-size: clamp(44px, 11vw, 150px); font-weight: 800; letter-spacing: 0.18em;
-        text-shadow: -4px 0 #ff2a2a, 4px 0 #00e5ff;
-        animation: glitch 1.6s steps(1) infinite;
-      }
-      #fade { position: fixed; inset: 0; background: #000; pointer-events: none; opacity: 0; transition: opacity 1.2s; }
-      /* show.js switches these classes on the body as the sequence plays */
-      body.title #title { opacity: 1; }
-      body.fade #fade { opacity: 1; }
-      @keyframes glitch {
-        0%, 10%, 58%, 100% { transform: none; clip-path: none; text-shadow: -4px 0 #ff2a2a, 4px 0 #00e5ff; }
-        8% { transform: translate(-6px, 2px) skewX(-8deg); text-shadow: 6px 0 #ff2a2a, -6px 0 #00e5ff; }
-        55% { transform: translate(5px, -2px); clip-path: inset(20% 0 35% 0); }
-      }
-      @media (prefers-reduced-motion: reduce) { #title { animation: none; } }
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #10190f; }
+      #stage { display: block; position: fixed; inset: 0; width: 100%; height: 100%; }
     </style>
   </head>
   <body>
-    <h1 id="title">INTRUSION</h1>
-    <div id="fade"></div>
-    <script type="module" src="/src/main.js"></script>
+    <canvas id="stage"></canvas>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

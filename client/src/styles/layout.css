@@ -1,0 +1,134 @@
+/* Where things sit on each screen. */
+.screen { position: absolute; inset: 0; padding: var(--space-3); }
+.screen--center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-3); padding: var(--space-3); }
+.corner { position: absolute; top: var(--space-3); right: var(--space-3); display: flex; gap: var(--space-2); z-index: 2; }
+.backdrop { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(16, 25, 15, 0.62); z-index: 5; }
+.backdrop--machine { background: rgba(0, 0, 0, 0.88); }
+
+/* Landing: the title sits over the pond, top right, so the robots under the oak stay in view. */
+.landing { display: flex; flex-direction: column; justify-content: flex-start; align-items: flex-end; text-align: right; gap: var(--space-2); padding: clamp(20px, 4vw, 56px); background: radial-gradient(ellipse at 85% 15%, rgba(16, 25, 15, 0.62), rgba(16, 25, 15, 0) 62%); color: var(--petal); }
+.landing .corner { top: auto; bottom: var(--space-3); }
+.logo { position: relative; font: 900 clamp(60px, 12.5vw, 190px)/0.85 var(--display); font-variation-settings: 'SOFT' 100, 'opsz' 144; letter-spacing: -0.035em; color: var(--petal); text-shadow: 0 6px 0 var(--moss); }
+/* The machine breaking through the word: a strip of it flickers into red monospace. */
+.logo::after { content: attr(data-text); position: absolute; inset: 0; font-family: var(--machine); font-weight: 700; letter-spacing: -0.06em; color: var(--rose); text-shadow: none; background: #000; clip-path: inset(100% 0 0 0); animation: intrude 6s steps(1) infinite; }
+.pitch { font: italic 500 clamp(20px, 2.6vw, 34px) var(--display); max-width: 24ch; text-shadow: 0 2px 0 var(--moss); }
+.landing .row { justify-content: flex-end; margin-top: var(--space-2); }
+.credits { position: absolute; left: var(--space-3); bottom: var(--space-3); text-align: left; font-size: 13px; color: #dfe6d0; max-width: 46ch; text-shadow: 0 1px 2px var(--moss); }
+.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-2); counter-reset: step; }
+.step { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 4px; padding: var(--space-2); background: var(--petal-shade); border-radius: var(--leaf-corners-small); font-size: 14px; }
+.step::before { counter-increment: step; content: counter(step); position: absolute; top: 8px; left: 10px; font: 900 28px var(--display); color: var(--leaf); }
+.preview { display: flex; align-items: center; gap: var(--space-2); }
+
+/* Lobby: the players are in the scene, so one small card in the corner is enough. */
+/* It sits on the pond side, where nobody stands. */
+.lobby__card { width: min(390px, 100%); gap: 10px; padding: 16px 18px; margin: 52px 0 0 auto; }
+.code { font: 700 32px var(--machine); letter-spacing: 0.04em; }
+.link { font: 12px var(--machine); background: #fffaf0; border: 1.5px dashed var(--moss); padding: 7px 9px; border-radius: 4px; overflow-wrap: anywhere; flex: 1; }
+.roster { display: flex; flex-direction: column; gap: 4px; max-height: 30vh; overflow-y: auto; }
+.roster li { display: flex; align-items: center; gap: 8px; padding: 4px 8px; background: var(--petal-shade); border-radius: 4px 12px 4px 12px; font-weight: 600; }
+.roster__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.roster__gone { opacity: 0.55; }
+.roster .tag { margin-left: 0; }
+
+/* In play: three small tags along the top, one line of guidance along the bottom. */
+.hud { position: absolute; top: 12px; left: 12px; right: 12px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: start; gap: var(--space-2); z-index: 4; pointer-events: none; }
+.hud > * { pointer-events: auto; }
+.hud__where { justify-self: start; display: flex; flex-direction: column; padding: 8px 16px 10px; background: var(--petal); border: 2.5px solid var(--moss); border-radius: var(--leaf-corners-small); box-shadow: var(--press); }
+.hud__where small { font: italic 600 14px var(--display); color: var(--leaf); }
+.hud__where strong { font: 700 21px/1.1 var(--display); font-variation-settings: 'SOFT' 100; }
+.hud__timer { justify-self: center; min-width: 108px; text-align: center; padding: 4px 18px 8px; font: 800 40px/1 var(--display); font-variation-settings: 'SOFT' 100; font-feature-settings: 'tnum'; background: var(--petal); border: 2.5px solid var(--moss); border-radius: 999px; box-shadow: var(--press); }
+.hud__timer--low { background: var(--rose); color: #fff7ee; animation: pulse 0.6s infinite; }
+.hud__side { justify-self: end; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.hud__score { padding: 6px 14px; background: var(--dandelion); border: 2.5px solid var(--moss); border-radius: var(--leaf-corners-small); box-shadow: var(--press); font: 800 20px var(--display); }
+.hud__score small { font: 600 13px var(--body); margin-left: 4px; }
+/* The watching rose. Open: a leaf-green tag. Watching: the machine. */
+.signal { position: absolute; top: 84px; left: 50%; translate: -50% 0; padding: 10px 26px; font: 800 26px var(--display); font-variation-settings: 'SOFT' 100; border: 2.5px solid var(--moss); box-shadow: var(--press); white-space: nowrap; }
+.signal--green { background: var(--sprout); color: var(--moss); border-radius: var(--leaf-corners-small); }
+.signal--red { background: #000; color: var(--rose); border-color: var(--rose); border-radius: 0; font: 700 26px var(--machine); box-shadow: 0 0 40px rgba(229, 48, 60, 0.6); }
+.objective { position: absolute; bottom: 20px; left: 50%; translate: -50% 0; padding: 10px 22px; max-width: calc(100vw - 32px); background: var(--petal); border: 2.5px solid var(--moss); border-radius: var(--leaf-corners-small); box-shadow: var(--press); font-weight: 600; font-size: 17px; text-align: center; }
+.toast { position: absolute; top: 148px; left: 50%; translate: -50% 0; padding: 10px 22px; background: var(--dandelion); border: 2.5px solid var(--moss); border-radius: var(--leaf-corners-small); box-shadow: var(--press); font: 700 20px var(--display); }
+.banner { position: absolute; top: 36%; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 20px; text-align: center; background: var(--petal); border-block: 3px solid var(--moss); animation: banner 2.2s both; z-index: 3; }
+.banner strong { font: 900 clamp(34px, 6.5vw, 76px)/1 var(--display); font-variation-settings: 'SOFT' 100; letter-spacing: -0.02em; }
+.banner span { font: italic 500 19px var(--display); color: var(--leaf); }
+.side-panel { position: absolute; top: 84px; right: 12px; width: min(360px, calc(100vw - 24px)); max-height: calc(100vh - 110px); z-index: 4; }
+
+/* The loading video. */
+.intro { position: absolute; inset: 0; background: #000; z-index: 8; }
+.intro video { width: 100%; height: 100%; object-fit: contain; }
+.intro__skip { position: absolute; right: 20px; bottom: 20px; }
+
+/* Turing check */
+.turing { align-items: center; text-align: center; width: min(460px, calc(100vw - 32px)); padding: var(--space-4) var(--space-3); gap: var(--space-2); display: flex; flex-direction: column; }
+.pad { width: 100%; height: 150px; border: 2px solid var(--rose); border-radius: 0; font: 700 30px var(--machine); color: var(--rose); background: #1a0508; cursor: pointer; }
+.pad--go { background: var(--sprout); color: var(--moss); border-color: var(--sprout); }
+.pad--done, .pad--early { color: #ffd9dc; cursor: default; }
+.progress { width: 100%; height: 6px; background: #2a0a0e; }
+.progress span { display: block; height: 100%; background: var(--rose); transition: width 0.3s linear; }
+
+/* Chat: notes passed round the meadow. */
+.chat { display: flex; flex-direction: column; gap: var(--space-2); min-height: 0; flex: 1; }
+.chat__log { flex: 1; min-height: 140px; max-height: 44vh; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px; }
+.chat__log li { padding: 7px 12px; background: #fffaf0; border: 1.5px solid var(--moss); border-radius: 4px 14px 14px 14px; }
+.chat__log li.muted { background: none; border: none; padding: 0; }
+.chat__log .chat__mine { align-self: flex-end; background: #d9eef8; border-radius: 14px 4px 14px 14px; }
+.chat__author { font-weight: 800; margin-right: 8px; }
+.chat__log small { color: #5a6650; font-size: 11px; }
+.chat__log p { overflow-wrap: anywhere; }
+.chat__form { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 8px; }
+
+/* Voting */
+.voting { width: min(1080px, calc(100vw - 32px)); }
+.voting__header { display: flex; justify-content: space-between; align-items: center; }
+.voting__header h2 { font-size: clamp(30px, 4.5vw, 52px); letter-spacing: -0.02em; }
+.voting__header .hud__timer { box-shadow: none; }
+.voting__body { display: grid; grid-template-columns: 1.4fr 1fr; gap: var(--space-3); min-height: 0; }
+.suspects { display: grid; grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: var(--space-2); }
+.suspects .card { width: 100%; }
+.voting__actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-3); min-height: 52px; }
+
+/* Scoreboard */
+.verdict { font: 600 22px var(--display); text-align: center; padding: 10px; border-block: 2px dashed var(--moss); max-width: none; }
+.rows { display: flex; flex-direction: column; gap: 6px; }
+.rank { display: grid; grid-template-columns: 34px 56px 1fr minmax(90px, 160px) 84px; align-items: center; gap: var(--space-2); padding: 2px 14px 2px 8px; background: var(--petal-shade); border-radius: var(--leaf-corners-small); }
+.rank:first-child { background: #ffe9a0; border: 2px solid var(--moss); }
+.rank--out { opacity: 0.6; }
+.rank__place { font: 900 24px var(--display); text-align: center; color: var(--leaf); }
+.rank__name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rank__score { font: 800 24px var(--display); font-feature-settings: 'tnum'; text-align: right; position: relative; }
+.gain { position: absolute; right: 0; top: -12px; font: 700 13px var(--body); font-style: normal; color: var(--leaf); }
+.meter { position: relative; height: 14px; border: 1.5px solid var(--moss); background: #fffaf0; overflow: hidden; }
+.meter span { display: block; height: 100%; background: var(--rose); transition: width var(--slow); }
+.meter small { position: absolute; inset: 0; display: grid; place-items: center; font: 700 10px var(--machine); mix-blend-mode: difference; color: #fff; }
+
+/* The reveal: the machine takes the whole screen. */
+.reveal { width: min(880px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; padding: var(--space-4) var(--space-3); display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--space-3); }
+.reveal__lead { font-size: 22px; color: #b9868a; }
+.reveal__bot h2 { font-size: clamp(40px, 8vw, 88px); }
+.glitch-frame { display: inline-block; filter: drop-shadow(0 0 26px var(--rose)); animation: glitch 1.2s steps(1) infinite; }
+.reveal__verdict { font: 700 clamp(18px, 2.6vw, 26px) var(--machine); padding: 10px 20px; max-width: none; }
+.reveal__verdict--humans { background: var(--sprout); color: var(--moss); border-radius: var(--leaf-corners-small); font-family: var(--display); }
+.reveal__verdict--ai { background: var(--rose); color: #000; }
+.stats { border-collapse: collapse; font-size: 15px; }
+.stats caption { color: #b9868a; font-size: 13px; padding-bottom: 6px; }
+.stats th, .stats td { padding: 6px 18px; border-bottom: 1px solid #5a1a20; }
+.stats td { font-weight: 700; font-size: 18px; color: #fff; }
+/* The awards go back to the players, so they are back on paper. */
+.awards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--space-2); width: 100%; font-family: var(--body); }
+.award { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: var(--space-2); background: var(--petal); color: var(--moss); border-radius: var(--leaf-corners-small); }
+.award .card { background: none; border: none; }
+.award .muted { color: #5a6650; }
+.reveal .row { justify-content: center; }
+
+/* Narrow laptops and tablets */
+@media (max-width: 900px) {
+  .hud { grid-template-columns: auto 1fr; }
+  .hud__timer { justify-self: end; font-size: 30px; min-width: 84px; }
+  .hud__side { grid-column: 1 / -1; }
+  .signal { top: 132px; font-size: 20px; }
+  .toast { top: 190px; }
+  .side-panel { top: 132px; }
+  .voting__body { grid-template-columns: 1fr; }
+  .steps { grid-template-columns: repeat(2, 1fr); }
+  .rank { grid-template-columns: 28px 56px 1fr 70px; }
+  .rank .meter { display: none; }
+}
