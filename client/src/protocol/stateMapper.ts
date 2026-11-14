@@ -39,6 +39,7 @@ export function mapState(state: unknown) {
   // The server adds the AI last; sort by id (random) so list order never gives it away.
   players.sort((a, b) => a.id.localeCompare(b.id));
   return {
+    hostId: str(raw.hostId),
     phase,
     round: num(raw.round),
     miniGame: str(raw.miniGame),

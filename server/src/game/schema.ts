@@ -22,6 +22,7 @@ export class PlayerState extends Schema {
 }
 
 export class GameState extends Schema {
+  @type("string") hostId = "";
   @type("string") phase: Phase = "lobby";
   @type("number") round = 0;
   @type("string") miniGame = "";

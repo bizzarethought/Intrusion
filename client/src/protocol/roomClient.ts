@@ -38,8 +38,7 @@ function refresh() {
     error: '',
     roomId: room.roomId,
     selfId: room.sessionId,
-    // The server treats its first connected client as host; the player map keeps join order.
-    hostId: state.players.find((player) => player.connected)?.id ?? '',
+    hostId: state.hostId,
     chat,
   });
 }

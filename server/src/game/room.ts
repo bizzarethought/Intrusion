@@ -77,6 +77,7 @@ export class FindTheBotRoom extends Room<GameState> {
     player.id = client.sessionId;
     player.displayName = this.sanitizeName(typeof options?.displayName === "string" ? options.displayName : "");
     this.state.players.set(client.sessionId, player);
+    if (!this.state.hostId) this.state.hostId = client.sessionId;
   }
 
   onLeave(client: Client): void {
@@ -84,6 +85,9 @@ export class FindTheBotRoom extends Room<GameState> {
     if (!player) return;
     if (this.state.phase === "lobby") {
       this.state.players.delete(client.sessionId); // free the seat and the name
+      if (this.state.hostId === client.sessionId) {
+        this.state.hostId = [...this.state.players.keys()][0] ?? "";
+      }
       return;
     }
     player.connected = false;
@@ -117,7 +121,7 @@ export class FindTheBotRoom extends Room<GameState> {
 
   private startMatch(client: Client): void {
     if (this.state.phase !== "lobby") return;
-    if (client.sessionId !== this.clients[0]?.sessionId) return; // only the host
+    if (client.sessionId !== this.state.hostId) return; // only the host
     const humans = this.all().length;
     if (humans < MIN_HUMANS) return;
     this.lock(); // nobody can join a running match
