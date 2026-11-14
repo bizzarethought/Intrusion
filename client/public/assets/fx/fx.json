@@ -1,0 +1,36 @@
+{
+ "rose": {
+  "level": "rlgl",
+  "frames": 10,
+  "frame_size": 512,
+  "order": "closed_to_open",
+  "centre_px_in_rlgl_bg": [
+   1855.1,
+   448.0
+  ],
+  "draw_scale": 1.0
+ },
+ "water": {
+  "frames": 12,
+  "frame_size": 384,
+  "playback": "ping_pong",
+  "fps": 10,
+  "pixels_per_meter": 259.5
+ },
+ "foliage": {
+  "files": [
+   "foliage_grass_a.png",
+   "foliage_grass_b.png",
+   "foliage_bluebell.png",
+   "foliage_dandelion.png"
+  ],
+  "frame_size": 512,
+  "pixels_per_meter": 465.5,
+  "level_pixels_per_meter": 259.5,
+  "draw_scale_to_match_level": 0.557,
+  "anchor": [
+   0.5,
+   0.643
+  ]
+ }
+}

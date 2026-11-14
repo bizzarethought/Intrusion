@@ -1,4 +1,5 @@
 import { Client, type Room } from 'colyseus.js';
+import { PositionBuffer } from './interpolation';
 import { mapLivePlayers, mapSignal, mapState } from './stateMapper';
 import { BACKEND_URL, MAX_CHAT_LENGTH, ROOM_NAME, type ChatLine, type LivePlayer, type Snapshot } from './types';
 
@@ -11,6 +12,14 @@ const EMPTY: Snapshot = {
 };
 
 let room: Room | null = null;
+let livePlayers: LivePlayer[] = [];
+const positions = new PositionBuffer();
+function receiveState() {
+  if (!room) return;
+  livePlayers = mapLivePlayers(room.state);
+  positions.push(livePlayers, `${room.state.phase}:${room.state.round}`, performance.now());
+  refresh();
+}
 let snapshot = EMPTY;
 let snapshotKey = '';
 let chat: ChatLine[] = [];
@@ -66,7 +75,9 @@ export async function connect(mode: 'create' | 'join', displayName: string, code
   }
   room = joined;
   chat = [];
-  joined.onStateChange(refresh);
+  positions.reset();
+  livePlayers = [];
+  joined.onStateChange(receiveState);
   joined.onMessage('chat', (message: { playerId?: unknown; message?: unknown }) => {
     if (typeof message?.playerId !== 'string' || typeof message?.message !== 'string') return;
     chat = [...chat, { key: chatKey++, playerId: message.playerId, message: message.message, round: snapshot.round }];
@@ -79,12 +90,14 @@ export async function connect(mode: 'create' | 'join', displayName: string, code
     room = null;
     publish({ ...snapshot, status: 'disconnected', error: 'Lost the connection to the game server.' });
   });
-  refresh();
+  receiveState();
 }
 
 export function leave() {
   const leaving = room;
   room = null;
+  livePlayers = [];
+  positions.reset();
   leaving?.leave();
   publish(EMPTY);
 }
@@ -98,7 +111,7 @@ export const getSnapshot = () => snapshot;
 /** Positions and phase straight from the server state, for the 3D world's frame loop. */
 export function live(): { players: LivePlayer[]; signal: 'green' | 'red' | null; phase: string; miniGame: string; phaseEndsAt: number; round: number; selfId: string } {
   return {
-    players: room ? mapLivePlayers(room.state) : [],
+    players: room ? positions.read(livePlayers, snapshot.selfId, performance.now()) : [],
     signal: room ? mapSignal(room.state) : null,
     phase: snapshot.phase,
     miniGame: snapshot.miniGame,

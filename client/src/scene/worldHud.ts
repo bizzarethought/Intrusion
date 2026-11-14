@@ -17,13 +17,10 @@ export type WorldHud = {
 
 const EMPTY: WorldHud = { objective: '', distance: 0, bearing: null, signal: null, result: '', scored: false };
 let current = EMPTY;
-let currentKey = JSON.stringify(EMPTY);
 const listeners = new Set<() => void>();
 
 export function setWorldHud(next: WorldHud) {
-  const key = JSON.stringify(next);
-  if (key === currentKey) return;
-  currentKey = key;
+  if (next.objective === current.objective && next.distance === current.distance && next.bearing === current.bearing && next.signal === current.signal && next.result === current.result && next.scored === current.scored) return;
   current = next;
   listeners.forEach((listener) => listener());
 }

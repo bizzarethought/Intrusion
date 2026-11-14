@@ -7,7 +7,7 @@ import './styles/layout.css';
 import './styles/animations.css';
 
 // The game view is created once and lives for the whole visit; React draws the UI over it.
-const game = createGame(document.getElementById('stage') as HTMLCanvasElement);
+const game = await createGame(document.getElementById('stage') as HTMLCanvasElement);
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

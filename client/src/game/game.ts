@@ -1,14 +1,17 @@
+import { createFx } from './fx';
+import { frameProfiler } from './performance';
+import { Application, Container, Sprite, Texture, Rectangle } from 'pixi.js';
 import { variantFor } from '../assets/looks';
 import { VARIANTS, variant } from '../assets/manifest';
 import { play } from '../audio';
 import { live, onCaught, send } from '../protocol/roomClient';
 import { clearWorldHud, setWorldHud } from '../scene/worldHud';
 import { DEPTH_SQUASH, LEVEL_FOR_GAME, LEVEL_HEIGHT, LEVEL_WIDTH, RLGL, loadLevel, toMeters, toPixels, walkable, type Level, type LevelId, type Spot } from './levels';
-import { ANCHOR, BODY_HEIGHT, CELL, botSheet } from './sprites';
+import { ANCHOR, BODY_HEIGHT, CELL, botSheet, loadedSheetCount } from './sprites';
 
-// The game view: a 2D canvas that draws a pre-rendered level, then the robots
+// The game view: a batched GPU scene with a pre-rendered level and robot sprites
 // on top, nearest last, so they look like they are standing in the scene.
-//   attract - the oak level with a few demo robots (landing and join screens)
+//   attract - the oak level with one demo robot (landing and join screens)
 //   lobby   - the oak level with the players gathered round
 //   play    - the current mini-game's level, with the local player in control;
 //             back to the oak for the Turing check, vote and scoreboard
@@ -34,8 +37,41 @@ type Bot = {
   offset: number; // so robots don't animate in unison
 };
 
-export function createGame(canvas: HTMLCanvasElement) {
-  const ctx = canvas.getContext('2d')!;
+export async function createGame(canvas: HTMLCanvasElement) {
+  const app = new Application();
+  await app.init({ canvas, width: innerWidth, height: innerHeight, resolution: Math.min(devicePixelRatio, 1.5), autoDensity: true, background: MOSS, preference: 'webgl', autoStart: false, antialias: false });
+  const world = new Container();
+  const background = new Sprite();
+  const actors = new Container();
+  const labels = new Container();
+  const wash = new Sprite(Texture.WHITE);
+  wash.tint = 0x960010;
+  wash.width = LEVEL_WIDTH; wash.height = LEVEL_HEIGHT;
+  world.addChild(background, actors, labels, wash);
+  app.stage.addChild(world);
+  const fx = createFx();
+  if (new URLSearchParams(location.search).has('perf')) Object.assign(window, { intrusionFx: fx.stats });
+  world.addChildAt(fx.ground, 1);
+  world.addChildAt(fx.foreground, world.getChildIndex(labels));
+  const visuals = new Map<Bot, { body: Sprite; shadow: Sprite; label: Sprite; labelKey: string }>();
+  const textures = new WeakMap<object, Map<string, Texture>>();
+  let depthOrder = '';
+  const shadowCanvas = document.createElement('canvas');
+  shadowCanvas.width = 128; shadowCanvas.height = 48;
+  const shadowCtx = shadowCanvas.getContext('2d')!;
+  shadowCtx.fillStyle = 'rgba(0,0,0,0.34)';
+  shadowCtx.beginPath(); shadowCtx.ellipse(64, 24, 64, 24, 0, 0, Math.PI * 2); shadowCtx.fill();
+  const shadowTexture = Texture.from(shadowCanvas);
+  const ringCanvas = document.createElement('canvas');
+  ringCanvas.width = 130; ringCanvas.height = 54;
+  const ringCtx = ringCanvas.getContext('2d')!;
+  ringCtx.strokeStyle = 'rgba(88,190,240,0.9)'; ringCtx.lineWidth = 5;
+  ringCtx.beginPath(); ringCtx.ellipse(65, 27, 62, 24, 0, 0, Math.PI * 2); ringCtx.stroke();
+  const ring = new Sprite(Texture.from(ringCanvas)); ring.anchor.set(0.5);
+  world.addChildAt(ring, 1);
+  let drawnLevel: Level | undefined;
+  let backgroundTexture: Texture | undefined;
+  const profiler = frameProfiler();
   let scene: GameScene = 'attract';
   let time = 0;
   let last = performance.now();
@@ -54,9 +90,9 @@ export function createGame(canvas: HTMLCanvasElement) {
   // The level is scaled to fit the window, centred, with moss-coloured bars if the shape differs.
   const view = { scale: 1, left: 0, top: 0 };
   function resize() {
-    const ratio = Math.min(devicePixelRatio, 2);
-    canvas.width = Math.round(innerWidth * ratio);
-    canvas.height = Math.round(innerHeight * ratio);
+    const ratio = Math.min(devicePixelRatio, 1.5);
+    app.renderer.resolution = ratio;
+    app.renderer.resize(innerWidth, innerHeight);
     view.scale = Math.min(innerWidth / LEVEL_WIDTH, innerHeight / LEVEL_HEIGHT);
     view.left = (innerWidth - LEVEL_WIDTH * view.scale) / 2;
     view.top = (innerHeight - LEVEL_HEIGHT * view.scale) / 2;
@@ -158,77 +194,72 @@ export function createGame(canvas: HTMLCanvasElement) {
   }
 
   function drawBot(bot: Bot, level: Level) {
-    const size = (CELL * level.botHeight) / BODY_HEIGHT; // one sprite cell, in level pixels
-    // A soft dark blob so the robot sits on the grass (the baked shadow is faint on dark ground).
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.34)';
-    ctx.beginPath();
-    ctx.ellipse(bot.x, bot.y, size * 0.21, size * 0.075, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    const sheet = botSheet(bot.look);
-    if (!sheet) {
-      // Still loading (or missing): a plain disc in the look's colour.
-      ctx.fillStyle = variant(bot.look).uiColor;
-      ctx.beginPath();
-      ctx.arc(bot.x, bot.y - size * 0.3, size * 0.2, 0, Math.PI * 2);
-      ctx.fill();
-      return;
+    let visual = visuals.get(bot);
+    if (!visual) {
+      const body = new Sprite(Texture.WHITE);
+      const shadow = new Sprite(shadowTexture);
+      const label = new Sprite();
+      body.anchor.set(ANCHOR.x, ANCHOR.y); shadow.anchor.set(0.5); label.anchor.set(0.5, 1);
+      visual = { body, shadow, label, labelKey: '' };
+      visuals.set(bot, visual);
+      depthOrder = '';
+      actors.addChild(shadow, body); labels.addChild(label);
     }
-    const clock = time + bot.offset;
-    const emoting = time < bot.emoteUntil;
-    let animation = `${bot.moving ? 'walk' : 'idle'}_${bot.facing}`;
-    if (bot.eliminated) animation = 'deactivated';
-    else if (emoting) animation = bot.emote;
-    else if (!bot.moving && clock % 4 < 0.15 && bot.facing !== 'back') animation = bot.facing === 'side' ? 'blink_side' : 'emote_blink';
-    const frames = sheet.animations[animation] ?? [animation];
-    const frame = sheet.frames[frames[Math.floor(clock * (sheet.fps[animation] ?? 6)) % frames.length]] ?? sheet.frames.idle_front_0;
-    if (!frame) return;
-    const hop = bot.moving ? Math.abs(Math.sin(clock * 10)) * size * 0.02 : 0;
-    ctx.save();
-    ctx.translate(bot.x, bot.y - hop);
-    if (bot.flip && bot.facing === 'side' && !bot.eliminated && !emoting) ctx.scale(-1, 1);
-    ctx.drawImage(sheet.image, frame.x, frame.y, sheet.cell, sheet.cell, -size * ANCHOR.x, -size * ANCHOR.y, size, size);
-    ctx.restore();
-  }
-
-  function drawNameTag(bot: Bot, level: Level) {
-    if (!bot.name) return;
+    const { body, shadow, label } = visual;
     const size = (CELL * level.botHeight) / BODY_HEIGHT;
+    shadow.position.set(bot.x, bot.y); shadow.width = size * 0.42; shadow.height = size * 0.15;
+    const sheet = botSheet(bot.look);
+    if (sheet) {
+      const clock = time + bot.offset;
+      const emoting = time < bot.emoteUntil;
+      let animation = `${bot.moving ? 'walk' : 'idle'}_${bot.facing}`;
+      if (bot.eliminated) animation = 'deactivated';
+      else if (emoting) animation = bot.emote;
+      else if (!bot.moving && clock % 4 < 0.15 && bot.facing !== 'back') animation = bot.facing === 'side' ? 'blink_side' : 'emote_blink';
+      const frames = sheet.animations[animation] ?? [animation];
+      const name = frames[Math.floor(clock * (sheet.fps[animation] ?? 6)) % frames.length];
+      const frame = sheet.frames[name] ?? sheet.frames.idle_front_0;
+      if (frame) {
+        let framesCache = textures.get(sheet);
+        if (!framesCache) { framesCache = new Map(); textures.set(sheet, framesCache); }
+        const key = `${frame.x}:${frame.y}`;
+        let texture = framesCache.get(key);
+        if (!texture) {
+          texture = new Texture({ source: Texture.from(sheet.image).source, frame: new Rectangle(frame.x, frame.y, sheet.cell, sheet.cell) });
+          framesCache.set(key, texture);
+        }
+        body.texture = texture;
+      }
+      body.tint = 0xdecfb5;
+      body.width = size; body.height = size;
+      if (bot.flip && bot.facing === 'side' && !bot.eliminated && !emoting) body.scale.x = -Math.abs(body.scale.x);
+      body.position.set(bot.x, bot.y - (bot.moving ? Math.abs(Math.sin(clock * 10)) * size * 0.02 : 0));
+    } else {
+      body.texture = Texture.WHITE; body.tint = variant(bot.look).uiColor;
+      body.width = size * 0.3; body.height = size * 0.5; body.position.set(bot.x, bot.y);
+    }
     const text = bot.isSelf ? `${bot.name} (you)` : bot.name;
-    ctx.font = '600 24px system-ui, sans-serif';
-    const width = ctx.measureText(text).width + 26;
-    const y = bot.y - size * 0.84;
-    const x = Math.min(LEVEL_WIDTH - width / 2 - 8, Math.max(width / 2 + 8, bot.x)); // keep the tag on the picture
-    ctx.fillStyle = bot.isSelf ? '#2a93c6' : 'rgba(16, 25, 15, 0.8)';
-    ctx.beginPath();
-    ctx.roundRect(x - width / 2, y - 19, width, 36, 18);
-    ctx.fill();
-    ctx.fillStyle = '#f3ecd8';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(text, x, y);
-  }
-
-  /** The watching rose's glow, and the line to reach. */
-  function drawRlgl(green: boolean) {
-    const { x, y, radius } = RLGL.watcher;
-    const pulse = 0.75 + Math.sin(time * (green ? 2 : 9)) * 0.25;
-    const glow = ctx.createRadialGradient(x, y, radius * 0.3, x, y, radius * 1.5);
-    glow.addColorStop(0, green ? `rgba(120, 255, 140, ${0.3 * pulse})` : `rgba(255, 20, 40, ${0.6 * pulse})`);
-    glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
-    ctx.fillStyle = glow;
-    ctx.fillRect(x - radius * 1.5, y - radius * 1.5, radius * 3, radius * 3);
-    // A faint shimmer along the finish.
-    const line = ctx.createLinearGradient(RLGL.finishX - 30, 0, RLGL.finishX + 30, 0);
-    line.addColorStop(0, 'rgba(242, 194, 48, 0)');
-    line.addColorStop(0.5, `rgba(242, 194, 48, ${0.28 + Math.sin(time * 3) * 0.08})`);
-    line.addColorStop(1, 'rgba(242, 194, 48, 0)');
-    ctx.fillStyle = line;
-    ctx.fillRect(RLGL.finishX - 30, RLGL.laneTop - 90, 60, RLGL.laneBottom - RLGL.laneTop + 150);
+    const labelKey = `${text}:${bot.isSelf}`;
+    label.visible = !!bot.name;
+    if (bot.name && visual.labelKey !== labelKey) {
+      const image = document.createElement('canvas');
+      const ctx = image.getContext('2d')!;
+      ctx.font = '600 24px system-ui, sans-serif';
+      image.width = Math.ceil(ctx.measureText(text).width + 26); image.height = 38;
+      ctx.font = '600 24px system-ui, sans-serif';
+      ctx.fillStyle = bot.isSelf ? '#2a93c6' : 'rgba(16,25,15,0.8)';
+      ctx.beginPath(); ctx.roundRect(0, 0, image.width, 36, 18); ctx.fill();
+      ctx.fillStyle = '#f3ecd8'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(text, image.width / 2, 18);
+      if (visual.labelKey) label.texture.destroy(true);
+      label.texture = Texture.from(image); visual.labelKey = labelKey;
+    }
+    label.position.set(Math.min(LEVEL_WIDTH - label.width / 2 - 8, Math.max(label.width / 2 + 8, bot.x)), bot.y - size * 0.84 + 19);
   }
 
   function frame(now: number) {
     requestAnimationFrame(frame);
+    profiler.begin(now);
     const dt = Math.min((now - last) / 1000, 0.1); // don't leap ahead after a paused tab
     last = now;
     time += dt;
@@ -237,10 +268,7 @@ export function createGame(canvas: HTMLCanvasElement) {
     const moving = scene === 'play' && (state.phase === 'travel' || state.phase === 'minigame');
     const levelId: LevelId = moving ? LEVEL_FOR_GAME[state.miniGame] ?? 'oak' : 'oak';
     const level = getLevel(levelId);
-    const ratio = canvas.width / innerWidth;
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = MOSS;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
     if (!level) return; // the picture is still loading
 
     // On the oak everyone stands at their spot; on a mini-game level players walk freely.
@@ -251,9 +279,16 @@ export function createGame(canvas: HTMLCanvasElement) {
     if (!free) { canWalk = false; walkTarget = null; if (fresh) clearWorldHud(); }
 
     const roster = scene === 'attract'
-      ? VARIANTS.slice(0, 6).map((look, i) => ({ id: `demo-${i}`, name: '', look: look.id as string, x: 0, z: 0, eliminated: false, finished: false }))
+      ? VARIANTS.slice(0, 1).map((look, i) => ({ id: `demo-${i}`, name: '', look: look.id as string, x: 0, z: 0, eliminated: false, finished: false }))
       : state.players.map((player) => ({ ...player, look: variantFor(player.id, state.selfId) as string }));
-    for (const id of bots.keys()) if (!roster.some((player) => player.id === id)) bots.delete(id);
+    for (const [id, bot] of bots) if (!roster.some((player) => player.id === id)) {
+      const visual = visuals.get(bot);
+      if (visual) {
+        if (visual.labelKey) visual.label.texture.destroy(true);
+        visual.body.destroy(); visual.shadow.destroy(); visual.label.destroy(); visuals.delete(bot);
+      }
+      bots.delete(id);
+    }
 
     roster.forEach((player, index) => {
       let bot = bots.get(player.id);
@@ -279,9 +314,9 @@ export function createGame(canvas: HTMLCanvasElement) {
       const fromY = bot.y;
       if (fresh || !bot.placed || bot.isSelf) { bot.x = target.x; bot.y = target.y; }
       else {
-        const ease = 1 - Math.exp(-dt * 10);
-        bot.x += (target.x - bot.x) * ease;
-        bot.y += (target.y - bot.y) * ease;
+        // Remote targets already come from the network interpolation buffer.
+        bot.x = target.x;
+        bot.y = target.y;
       }
       const stepX = bot.x - fromX;
       const stepY = bot.y - fromY;
@@ -293,29 +328,34 @@ export function createGame(canvas: HTMLCanvasElement) {
       } else if (!free) bot.facing = 'front'; // gathered round the oak, facing us
     });
 
-    // Draw: level, ground effects, robots nearest-last, name tags, then the red-light wash.
-    ctx.setTransform(view.scale * ratio, 0, 0, view.scale * ratio, view.left * ratio, view.top * ratio);
-    ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(level.image, 0, 0, LEVEL_WIDTH, LEVEL_HEIGHT);
+    world.scale.set(view.scale); world.position.set(view.left, view.top);
+    if (drawnLevel !== level) {
+      backgroundTexture?.destroy(true);
+      backgroundTexture = Texture.from(level.image);
+      background.texture = backgroundTexture;
+      background.width = LEVEL_WIDTH; background.height = LEVEL_HEIGHT;
+      drawnLevel = level;
+    }
     const light = free && level.id === 'rlgl' && state.phase === 'minigame' ? state.signal : null;
-    if (light) drawRlgl(light === 'green');
-
+    fx.update(level, dt, time, light, state.phase);
     const order = [...bots.values()].sort((a, b) => a.y - b.y);
-    for (const bot of order) {
-      if (bot.isSelf && free && !bot.eliminated) {
-        ctx.strokeStyle = 'rgba(88, 190, 240, 0.9)';
-        ctx.lineWidth = 5;
-        ctx.beginPath();
-        ctx.ellipse(bot.x, bot.y, 62, 24, 0, 0, Math.PI * 2);
-        ctx.stroke();
+    for (const bot of order) drawBot(bot, level);
+    const nextOrder = order.map(bot => `${bot.look}:${bot.offset}`).join('|');
+    if (nextOrder !== depthOrder) {
+      // Reorder only when depth changes; preserve overlaps rather than grouping by look.
+      for (const bot of order) {
+        const visual = visuals.get(bot)!;
+        actors.setChildIndex(visual.shadow, actors.children.length - 1);
+        actors.setChildIndex(visual.body, actors.children.length - 1);
       }
-      drawBot(bot, level);
+      depthOrder = nextOrder;
     }
-    if (scene !== 'attract') for (const bot of order) drawNameTag(bot, level);
-    if (light === 'red') {
-      ctx.fillStyle = `rgba(150, 0, 16, ${0.16 + Math.sin(time * 9) * 0.04})`;
-      ctx.fillRect(0, 0, LEVEL_WIDTH, LEVEL_HEIGHT);
-    }
+    const self = order.find(bot => bot.isSelf);
+    ring.visible = !!self && free && !self.eliminated;
+    if (self) ring.position.set(self.x, self.y);
+    wash.alpha = light === 'red' ? 0.16 + Math.sin(time * 9) * 0.04 : 0;
+    app.render();
+    profiler.end(bots.size, loadedSheetCount(), app.renderer.resolution, fx.stats);
   }
   requestAnimationFrame(frame);
 
@@ -331,4 +371,4 @@ export function createGame(canvas: HTMLCanvasElement) {
   };
 }
 
-export type Game = ReturnType<typeof createGame>;
+export type Game = Awaited<ReturnType<typeof createGame>>;
