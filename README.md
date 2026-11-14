@@ -55,7 +55,7 @@ server state secret.
 
 ## Backend status
 
-The backend foundation is in `src/` and currently includes:
+The backend foundation is in `server/src/` and currently includes:
 
 - Colyseus room creation and player joining
 - Server-authoritative movement and scoring
@@ -67,6 +67,7 @@ The backend foundation is in `src/` and currently includes:
 To run it locally after installing Node.js:
 
 ```bash
+cd server
 npm install
 cp .env.example .env
 npm run dev
@@ -86,6 +87,6 @@ we cut mini-games before we cut the multiplayer loop.
 
 ## Project docs
 
-- [Feasibility study](./feasibility_study.md)
-- [Design decisions](./decisions.md)
+- [Feasibility study](./docs/feasibility_study.md)
+- [Design decisions](./docs/decisions.md)
 
