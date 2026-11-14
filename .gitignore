@@ -6,7 +6,6 @@ node_modules/
 dist/
 build/
 .cache/
-elements/
 
 *.log
 npm-debug.log*

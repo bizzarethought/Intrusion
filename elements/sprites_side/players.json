@@ -1,0 +1,91 @@
+{
+ "players": [
+  {
+   "id": "original",
+   "sheet": "bot_original.png",
+   "atlas": "bot_original.json",
+   "accessory": null,
+   "uiColor": "#8a7a5c"
+  },
+  {
+   "id": "crimson",
+   "sheet": "bot_crimson.png",
+   "atlas": "bot_crimson.json",
+   "accessory": "horns",
+   "uiColor": "#d91010"
+  },
+  {
+   "id": "cobalt",
+   "sheet": "bot_cobalt.png",
+   "atlas": "bot_cobalt.json",
+   "accessory": "headphones",
+   "uiColor": "#1440f2"
+  },
+  {
+   "id": "lime",
+   "sheet": "bot_lime.png",
+   "atlas": "bot_lime.json",
+   "accessory": "propeller cap",
+   "uiColor": "#59e61f"
+  },
+  {
+   "id": "sunflower",
+   "sheet": "bot_sunflower.png",
+   "atlas": "bot_sunflower.json",
+   "accessory": "crown",
+   "uiColor": "#ffb80d"
+  },
+  {
+   "id": "bubblegum",
+   "sheet": "bot_bubblegum.png",
+   "atlas": "bot_bubblegum.json",
+   "accessory": "bow",
+   "uiColor": "#ff59a6"
+  },
+  {
+   "id": "violet",
+   "sheet": "bot_violet.png",
+   "atlas": "bot_violet.json",
+   "accessory": "wings",
+   "uiColor": "#802ee6"
+  },
+  {
+   "id": "snow",
+   "sheet": "bot_snow.png",
+   "atlas": "bot_snow.json",
+   "accessory": "halo",
+   "uiColor": "#cce0ff"
+  },
+  {
+   "id": "tangerine",
+   "sheet": "bot_tangerine.png",
+   "atlas": "bot_tangerine.json",
+   "accessory": "moustache",
+   "uiColor": "#ff6b0d"
+  },
+  {
+   "id": "teal",
+   "sheet": "bot_teal.png",
+   "atlas": "bot_teal.json",
+   "accessory": "top hat",
+   "uiColor": "#0ab8a8"
+  }
+ ],
+ "cell": 360,
+ "animations": [
+  "idle_side",
+  "walk_side",
+  "idle_front",
+  "walk_front",
+  "idle_back",
+  "walk_back"
+ ],
+ "singleFrames": [
+  "blink_side",
+  "deactivated",
+  "emote_blink",
+  "emote_happy",
+  "emote_angry",
+  "emote_sus"
+ ]
+}
