@@ -43,13 +43,15 @@ It learns its imperfections from our own playtest data. The server only gives
 the bot information a normal player could see, keeping hidden roles and
 server state secret.
 
-## Built with
+## Tech stack
 
-- Three.js with React Three Fiber or Babylon.js
-- Rapier physics
-- Colyseus on Node.js
-- AMD Developer Cloud or Token Lab
-- In-memory game state for the hackathon demo
+| Layer | Technology |
+| --- | --- |
+| 3D client | Three.js with React Three Fiber or Babylon.js |
+| Physics | Rapier |
+| Multiplayer server | Node.js with Colyseus |
+| AI model | AMD Developer Cloud |
+| Game state | In-memory state for the hackathon demo |
 
 ## Build order
 
@@ -68,8 +70,3 @@ we cut mini-games before we cut the multiplayer loop.
 - [Feasibility study](./feasibility_study.md)
 - [Design decisions](./decisions.md)
 
-## Keep secrets secret
-
-API keys stay server-side and never go in the repository. Use environment
-variables such as `AMD_TOKENLAB_API_KEY`; local `.env` files are ignored by
-Git.
