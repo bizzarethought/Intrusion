@@ -1,0 +1,83 @@
+{
+ "level": "side",
+ "image": "side_bg.png",
+ "size": [
+  1920,
+  1080
+ ],
+ "pixels_per_meter": 290.91,
+ "camera_elevation_deg": 38,
+ "bot_height_px": 175,
+ "spawn_points": [
+  {
+   "px": [
+    378.2,
+    493.6
+   ],
+   "facing_deg": -1
+  },
+  {
+   "px": [
+    203.6,
+    375.4
+   ],
+   "facing_deg": -14
+  },
+  {
+   "px": [
+    436.4,
+    315.0
+   ],
+   "facing_deg": -23
+  },
+  {
+   "px": [
+    145.5,
+    517.3
+   ],
+   "facing_deg": 5
+  },
+  {
+   "px": [
+    320.0,
+    617.9
+   ],
+   "facing_deg": -14
+  },
+  {
+   "px": [
+    1716.4,
+    496.3
+   ],
+   "facing_deg": 190
+  },
+  {
+   "px": [
+    1832.7,
+    540.6
+   ],
+   "facing_deg": 163
+  },
+  {
+   "px": [
+    1687.3,
+    387.2
+   ],
+   "facing_deg": 185
+  },
+  {
+   "px": [
+    901.8,
+    442.9
+   ],
+   "facing_deg": 180
+  },
+  {
+   "px": [
+    1309.1,
+    450.0
+   ],
+   "facing_deg": 0
+  }
+ ]
+}

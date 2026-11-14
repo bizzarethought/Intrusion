@@ -1,0 +1,83 @@
+{
+ "level": "podium",
+ "image": "podium_bg.png",
+ "size": [
+  1920,
+  1080
+ ],
+ "pixels_per_meter": 266.67,
+ "camera_elevation_deg": 38,
+ "bot_height_px": 160,
+ "spawn_points": [
+  {
+   "px": [
+    208.3,
+    397.5
+   ],
+   "facing_deg": 20
+  },
+  {
+   "px": [
+    315.5,
+    491.2
+   ],
+   "facing_deg": 32
+  },
+  {
+   "px": [
+    461.9,
+    491.2
+   ],
+   "facing_deg": 46
+  },
+  {
+   "px": [
+    638.0,
+    538.5
+   ],
+   "facing_deg": 63
+  },
+  {
+   "px": [
+    832.8,
+    607.4
+   ],
+   "facing_deg": 81
+  },
+  {
+   "px": [
+    1033.9,
+    588.6
+   ],
+   "facing_deg": 99
+  },
+  {
+   "px": [
+    1228.7,
+    574.7
+   ],
+   "facing_deg": 117
+  },
+  {
+   "px": [
+    1404.8,
+    497.6
+   ],
+   "facing_deg": 134
+  },
+  {
+   "px": [
+    1551.1,
+    461.3
+   ],
+   "facing_deg": 148
+  },
+  {
+   "px": [
+    1658.4,
+    352.7
+   ],
+   "facing_deg": 160
+  }
+ ]
+}

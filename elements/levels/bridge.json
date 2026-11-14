@@ -1,0 +1,225 @@
+{
+ "level": "bridge",
+ "image": "bridge_bg.png",
+ "size": [
+  1920,
+  1080
+ ],
+ "pixels_per_meter": 290.91,
+ "camera_elevation_deg": 38,
+ "bot_height_px": 175,
+ "spawn_points": [
+  {
+   "px": [
+    261.8,
+    441.1
+   ],
+   "facing_deg": 0
+  },
+  {
+   "px": [
+    378.2,
+    571.2
+   ],
+   "facing_deg": 0
+  },
+  {
+   "px": [
+    203.6,
+    600.7
+   ],
+   "facing_deg": 10
+  },
+  {
+   "px": [
+    87.3,
+    473.8
+   ],
+   "facing_deg": -5
+  },
+  {
+   "px": [
+    407.3,
+    371.7
+   ],
+   "facing_deg": -15
+  },
+  {
+   "px": [
+    -0.0,
+    608.8
+   ],
+   "facing_deg": 5
+  },
+  {
+   "px": [
+    174.5,
+    316.3
+   ],
+   "facing_deg": -10
+  },
+  {
+   "px": [
+    596.4,
+    561.9
+   ],
+   "facing_deg": 0
+  },
+  {
+   "px": [
+    741.8,
+    463.3
+   ],
+   "facing_deg": 0
+  },
+  {
+   "px": [
+    1032.7,
+    561.9
+   ],
+   "facing_deg": 0
+  }
+ ],
+ "panels": [
+  {
+   "col": 0,
+   "row": 0,
+   "px": [
+    596.4,
+    568.7
+   ],
+   "present": true,
+   "size_px": 122
+  },
+  {
+   "col": 0,
+   "row": 1,
+   "px": [
+    596.4,
+    470.2
+   ],
+   "present": true,
+   "size_px": 122
+  },
+  {
+   "col": 1,
+   "row": 0,
+   "px": [
+    741.8,
+    568.7
+   ],
+   "present": true,
+   "size_px": 122
+  },
+  {
+   "col": 1,
+   "row": 1,
+   "px": [
+    741.8,
+    470.2
+   ],
+   "present": true,
+   "size_px": 122
+  },
+  {
+   "col": 2,
+   "row": 0,
+   "px": [
+    887.3,
+    568.7
+   ],
+   "present": false,
+   "size_px": 122
+  },
+  {
+   "col": 2,
+   "row": 1,
+   "px": [
+    887.3,
+    470.2
+   ],
+   "present": true,
+   "size_px": 122
+  },
+  {
+   "col": 3,
+   "row": 0,
+   "px": [
+    1032.7,
+    568.7
+   ],
+   "present": true,
+   "size_px": 122
+  },
+  {
+   "col": 3,
+   "row": 1,
+   "px": [
+    1032.7,
+    470.2
+   ],
+   "present": false,
+   "size_px": 122
+  },
+  {
+   "col": 4,
+   "row": 0,
+   "px": [
+    1178.2,
+    568.7
+   ],
+   "present": true,
+   "size_px": 122
+  },
+  {
+   "col": 4,
+   "row": 1,
+   "px": [
+    1178.2,
+    470.2
+   ],
+   "present": true,
+   "size_px": 122
+  },
+  {
+   "col": 5,
+   "row": 0,
+   "px": [
+    1323.6,
+    568.7
+   ],
+   "present": false,
+   "size_px": 122
+  },
+  {
+   "col": 5,
+   "row": 1,
+   "px": [
+    1323.6,
+    470.2
+   ],
+   "present": true,
+   "size_px": 122
+  },
+  {
+   "col": 6,
+   "row": 0,
+   "px": [
+    1469.1,
+    568.7
+   ],
+   "present": true,
+   "size_px": 122
+  },
+  {
+   "col": 6,
+   "row": 1,
+   "px": [
+    1469.1,
+    470.2
+   ],
+   "present": true,
+   "size_px": 122
+  }
+ ]
+}
