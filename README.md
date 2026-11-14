@@ -1,8 +1,8 @@
-# Find the Bot
+# Intrusion
 
 > **Can you catch the AI before it catches you?**
 
-**Find the Bot** is our Emory Hacks 3D multiplayer party game. Run through a
+**Intrusion** is our Emory Hacks 3D multiplayer party game. Run through a
 shared world, compete in chaotic mini-games, interrogate your friends, and
 vote out the player who is secretly an AI.
 
