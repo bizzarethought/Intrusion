@@ -8,8 +8,8 @@ function positiveInt(value: string | undefined, fallback: number): number {
 export const config = {
   port: positiveInt(process.env.PORT, 2567),
   ai: {
-    baseUrl: process.env.AI_BASE_URL ?? "",
-    apiKey: process.env.AI_API_KEY ?? "",
+    baseUrl: process.env.AI_BASE_URL ?? process.env.AMD_TOKENLAB_BASE_URL ?? "",
+    apiKey: process.env.AI_API_KEY ?? process.env.AMD_TOKENLAB_API_KEY ?? "",
     model: process.env.AI_MODEL ?? "",
   },
 };
