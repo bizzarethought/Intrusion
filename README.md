@@ -53,6 +53,25 @@ server state secret.
 | AI model | AMD Developer Cloud |
 | Game state | In-memory state for the hackathon demo |
 
+## Backend status
+
+The backend foundation is in `src/` and currently includes:
+
+- Colyseus room creation and player joining
+- Server-authoritative movement and scoring
+- Match phases, round timers, and mini-game rotation
+- Hidden bot creation and scripted travel behavior
+- Vote validation and elimination
+- Token Lab/AMD-compatible chat client with a safe fallback
+
+To run it locally after installing Node.js:
+
+```bash
+npm install
+cp .env.example .env
+npm run dev
+```
+
 ## Build order
 
 1. Server-authoritative multiplayer movement
