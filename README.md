@@ -1,82 +1,75 @@
 # Find the Bot
 
-**Find the Bot** is a 3D multiplayer party game for Emory Hacks. Players run
-through a small shared world, compete in mini-games, and vote after each round
-to find the AI player hidden among them.
+> **Can you catch the AI before it catches you?**
 
-The game is designed for **3 to 10 human players** in a private room. The
-challenge is not simply to identify an AI response: the bot also plays the
-mini-games, travels between arenas, chats, and votes like an imperfect human.
+**Find the Bot** is our Emory Hacks 3D multiplayer party game. Run through a
+shared world, compete in chaotic mini-games, interrogate your friends, and
+vote out the player who is secretly an AI.
 
-## How it works
+The twist: the bot does not just chat. It runs the course, makes mistakes,
+answers prompts, joins conversations, and votes like an imperfect human.
 
-1. Players spawn in a shared 3D world.
-2. Everyone runs to the next mini-game arena.
-3. Players compete for points.
-4. One or two players receive a surprise Turing check.
-5. Players discuss and vote someone out.
-6. The game reveals whether the voted player was human or AI.
-7. The next arena opens.
+## The demo
 
-The AI wins by surviving the vote-outs. Humans win by catching it. A noisy
-sus meter provides clues based on reaction time, accuracy, consistency, and
-typing rhythm, but it is intentionally not a final answer.
+- **3-10 players** join a private room.
+- Players run from spawn to the next arena.
+- Everyone competes for points.
+- Surprise Turing checks feed a deliberately unreliable sus meter.
+- Players argue, accuse, and vote someone out.
+- The reveal shows whether the vote was human or AI.
 
-## Mini-games
+Catch the AI early for the biggest score. If it survives the vote-outs, the AI
+wins.
 
-The hackathon mini-game pool is:
+## Five ways to look suspicious
 
-- Red Light, Green Light
-- Pick a Side
-- Prompt Podium
-- Glass Bridge Memory
-- Tile Drop
+1. **Red Light, Green Light** - reaction timing
+2. **Pick a Side** - decisions and crowd-following
+3. **Prompt Podium** - humor, chat, and typing rhythm
+4. **Glass Bridge Memory** - memory and accuracy
+5. **Tile Drop** - panic movement and pathing
 
-Each mini-game exposes different behavior: reaction timing, decision-making,
-chat and typing, memory, or movement.
+Every mini-game creates evidence, but no single clue proves anything.
 
-## AI design
+## What makes the bot believable?
 
-The bot has two parts:
+The bot is split into two systems:
 
-- **Model-powered behavior:** chat, prompt responses, Turing checks, meeting
-  discussion, and voting.
-- **Scripted gameplay behavior:** movement, travel, reaction delays, mistakes,
-  pathing, and mini-game actions.
+- **AI model:** chat, prompt answers, Turing checks, accusations, and votes
+- **Game server:** travel, movement, timing, mistakes, pathing, and mini-game
+  actions
 
-The model must only receive information available to a normal player. Hidden
-roles and server-only state stay on the authoritative game server. Bot
-behavior is tuned using the team's own playtest data so it is varied rather
-than perfect.
+It learns its imperfections from our own playtest data. The server only gives
+the bot information a normal player could see, keeping hidden roles and
+server state secret.
 
-## Planned technology
+## Built with
 
-- **Client:** Three.js with React Three Fiber or Babylon.js
-- **Physics:** Rapier
-- **Multiplayer:** Colyseus on Node.js
-- **AI:** AMD Developer Cloud or Token Lab through an OpenAI-compatible API
-- **Storage:** In-memory state for the demo; persistent stats later if needed
+- Three.js with React Three Fiber or Babylon.js
+- Rapier physics
+- Colyseus on Node.js
+- AMD Developer Cloud or Token Lab
+- In-memory game state for the hackathon demo
 
-## Development priorities
+## Build order
 
-1. Build server-authoritative multiplayer synchronization.
-2. Get players moving together in one small 3D world.
-3. Connect one bot to the server and AI API.
-4. Complete one mini-game end to end.
-5. Add the round flow, voting, scoring, and reveal.
-6. Expand to the remaining mini-games and tune bot behavior.
+1. Server-authoritative multiplayer movement
+2. One small 3D world and travel route
+3. One bot connected to the AI API
+4. One complete mini-game
+5. Voting, scoring, and the reveal
+6. Remaining mini-games and bot tuning
 
-The project intentionally prioritizes a small, playable world over a large
-world or complex physics system. If time is limited, reduce the number of
-mini-games rather than leaving the multiplayer loop unfinished.
+We are optimizing for a playable demo, not a giant world. If time gets tight,
+we cut mini-games before we cut the multiplayer loop.
 
-## Project documents
+## Project docs
 
 - [Feasibility study](./feasibility_study.md)
 - [Design decisions](./decisions.md)
 
-## Security
+## Keep secrets secret
 
-API keys must remain server-side and must never be committed to the
-repository. Store local credentials in environment variables, such as
-`AMD_TOKENLAB_API_KEY`, and keep `.env` files untracked.
+API keys stay server-side and never go in the repository. Use environment
+variables such as `AMD_TOKENLAB_API_KEY`; local `.env` files are ignored by
+Git.
