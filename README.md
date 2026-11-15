@@ -13,7 +13,10 @@ sprites are drawn in a 2D GPU scene, with React handling the interface.
 
 1. Create a private room and share its room code or link.
 2. At least three humans join; the host starts the match. For a local test,
-   use three browser tabs with different display names.
+   use three browser tabs with different display names. During the intro,
+   everyone receives a fresh alias, appearance assignment, and shuffled spawn
+   position. The AI appears with the complete anonymous roster, rather than
+   as one recognizable late arrival. Only your own character is marked “you.”
 3. After the intro and a short ready phase, run on green and freeze on red.
    Moving on red sends you back to the start. Earlier finishers earn more points.
 4. Complete a reaction check, chat, and vote for the suspected bot or skip.
@@ -24,7 +27,9 @@ sprites are drawn in a 2D GPU scene, with React handling the interface.
 **Controls:** WASD or arrow keys to move, click/tap the ground to walk to a
 point, Tab for scores, and Space or the on-screen pad for the reaction check.
 Eliminated players can watch. Play again returns to the menu to create or join
-a new room.
+a new room. Aliases stay stable across mini-games and votes so you can build
+suspicion. The final reveal shows who was who; each new match reshuffles the
+identities again. Lobby-to-match identity mappings remain private on the server.
 
 ## Run locally
 

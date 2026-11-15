@@ -27,6 +27,7 @@ export function mapState(state: unknown) {
     players.push({
       id,
       name: str(p.displayName, 'Player'),
+      realName: isRevealPhase(phase) ? str(p.realName) || undefined : undefined,
       score: num(p.score),
       turingScore: num(p.turingScore),
       connected: bool(p.connected, true),
@@ -36,7 +37,7 @@ export function mapState(state: unknown) {
       isBot: isRevealPhase(phase) ? bool(p.isBot) : undefined,
     });
   });
-  // The server adds the AI last; sort by id (random) so list order never gives it away.
+  // Public ids and server insertion order are shuffled at match start. Keep the UI stable.
   players.sort((a, b) => a.id.localeCompare(b.id));
   return {
     hostId: str(raw.hostId),

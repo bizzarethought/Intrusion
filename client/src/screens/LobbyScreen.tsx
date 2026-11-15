@@ -40,6 +40,7 @@ export function LobbyScreen({ game }: { game: Snapshot }) {
         <p className="status" role="status" aria-live="polite">
           {missing > 0 ? `Waiting for ${missing} more player${missing > 1 ? 's' : ''}.` : isHost ? 'Everyone is here. Start when you are ready.' : 'Waiting for the host to start.'}
         </p>
+        <p className="muted">When the match starts, everyone gets a secret alias and a new look. Names are revealed at the end.</p>
         {isHost && <button className="button button--primary button--big" disabled={missing > 0} onClick={() => { play('phase'); send.startMatch(); }}>Start match</button>}
       </section>
     </div>

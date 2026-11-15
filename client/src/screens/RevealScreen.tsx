@@ -56,6 +56,14 @@ export function RevealScreen({ game }: { game: Snapshot }) {
           </table>
         )}
 
+        <table className="stats step-4">
+          <caption>Who was who</caption>
+          <thead><tr><th scope="col">Match alias</th><th scope="col">Player</th></tr></thead>
+          <tbody>{game.players.map(player => (
+            <tr key={player.id}><th scope="row">{player.name}</th><td>{player.isBot ? 'AI' : player.realName || 'Human'}</td></tr>
+          ))}</tbody>
+        </table>
+
         <ul className="awards step-5">
           {awards.filter((award) => award.winner).map((award) => (
             <li key={award.title} className="award">

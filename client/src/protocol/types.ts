@@ -83,6 +83,8 @@ export const miniGameInfo = (id: string): MiniGame => MINI_GAMES[id] ?? UNKNOWN_
 export type Player = {
   id: string;
   name: string;
+  /** Original lobby name, only available after the final reveal. */
+  realName?: string;
   score: number;
   /** 0-100, higher looks more human. A clue, not a verdict. */
   turingScore: number;

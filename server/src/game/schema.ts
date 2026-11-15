@@ -7,6 +7,8 @@ import type { Phase } from "./constants.js";
 export class PlayerState extends Schema {
   @type("string") id = "";
   @type("string") displayName = "";
+  /** Original lobby name, populated only at the final reveal. */
+  @type("string") realName = "";
   /** Position in metres from the middle of the level: x across, z toward the camera. */
   @type("number") x = 0;
   @type("number") z = 0;

@@ -14,13 +14,13 @@ import {
   type Phase,
 } from "./constants.js";
 import { RLGL_FIELD, placementPoints, voteBudget, votedOut } from "./rules.js";
+import { matchAliases, shuffled } from "./identities.js";
 import { GameState, PlayerState } from "./schema.js";
 
 const RUN_SPEED = 1.5; // metres per second; the client walks at this speed
 const SPEED_SLACK = 1.5; // how far over that a move may be before it is cut short (network jitter)
 const RED_GRACE_MS = 400; // reaction time allowed after the light turns red
 const CHAT_GAP_MS = 600; // one chat message per player per this long
-const BOT_NAMES = ["Alex", "Sam", "Jordan", "Riley", "Casey", "Morgan", "Jamie", "Taylor", "Quinn", "Avery"];
 const between = (min: number, max: number) => min + Math.random() * (max - min);
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 const pick = <T>(list: T[]): T => list[Math.floor(Math.random() * list.length)];
@@ -37,6 +37,8 @@ export class FindTheBotRoom extends Room<GameState> {
   private readonly conversation = new BotConversation((context, signal) => this.aiClient.respond(context, signal));
   /** The AI player's id. Lives only on the server until the reveal. */
   private botId = "";
+  private readonly matchPlayers = new Map<string, string>();
+  private readonly lobbyNames = new Map<string, string>();
   private pendingWinner: "" | "humans" | "ai" = "";
   private readonly votes = new Map<string, string | null>();
   private readonly turingDone = new Set<string>();
@@ -58,7 +60,7 @@ export class FindTheBotRoom extends Room<GameState> {
     this.onMessage("turing_result", (client, message) => this.recordTuringResult(client, asRecord(message)));
     this.onMessage("vote", (client, message) => {
       const target = asRecord(message).targetId;
-      this.castVote(client.sessionId, typeof target === "string" ? target : null);
+      this.castVote(this.playerId(client.sessionId), typeof target === "string" ? target : null);
     });
     this.onMessage("chat", (client, message) => this.chat(client, asRecord(message)));
     this.tickTimer = setInterval(() => this.tick(), 100);
@@ -74,7 +76,7 @@ export class FindTheBotRoom extends Room<GameState> {
   }
 
   onLeave(client: Client): void {
-    const player = this.state.players.get(client.sessionId);
+    const player = this.state.players.get(this.playerId(client.sessionId));
     if (!player) return;
     if (this.state.phase === "lobby") {
       this.state.players.delete(client.sessionId); // free the seat and the name
@@ -96,6 +98,10 @@ export class FindTheBotRoom extends Room<GameState> {
   }
 
   // ---------------------------------------------------------------- players
+
+  private playerId(sessionId: string): string {
+    return this.matchPlayers.get(sessionId) ?? sessionId;
+  }
 
   private all(): PlayerState[] {
     return [...this.state.players.values()];
@@ -120,16 +126,28 @@ export class FindTheBotRoom extends Room<GameState> {
     if (humans < MIN_HUMANS) return;
     this.lock(); // nobody can join a running match
 
-    // The AI joins looking like any other player: a random id and an unused ordinary name.
-    const taken = new Set(this.all().map((player) => player.displayName.toLowerCase()));
-    const bot = new PlayerState();
-    bot.id = generateId();
-    bot.displayName = pick(BOT_NAMES.filter((name) => !taken.has(name.toLowerCase())));
-    this.botId = bot.id;
-    this.state.players.set(bot.id, bot);
+    // Replace every lobby object and id, including join order, before adding the AI.
+    // Reusing schema objects would preserve an observable reference back to a friend.
+    const lobby = this.all();
+    const oldIds = new Set(lobby.map(player => player.id));
+    const aliases = matchAliases(lobby.map(player => player.displayName), humans + 1);
+    const seats = shuffled([...lobby.map(player => ({ sessionId: player.id, name: player.displayName })), { sessionId: "", name: "" }]);
+    this.state.players.clear();
+    this.state.hostId = ""; // host status must not identify a human during the match
+    seats.forEach((seat, index) => {
+      const player = new PlayerState();
+      do { player.id = generateId(); } while (oldIds.has(player.id) || this.state.players.has(player.id));
+      player.displayName = aliases[index];
+      if (seat.sessionId) {
+        this.matchPlayers.set(seat.sessionId, player.id);
+        this.lobbyNames.set(player.id, seat.name);
+      } else this.botId = player.id;
+      this.state.players.set(player.id, player);
+    });
 
     this.state.votesRemaining = voteBudget(humans);
     this.beginPhase("loading", LOADING_MS);
+    for (const client of this.clients) client.send("match_identity", { playerId: this.playerId(client.sessionId) });
   }
 
   private beginPhase(phase: Phase, durationMs: number): void {
@@ -203,6 +221,7 @@ export class FindTheBotRoom extends Room<GameState> {
     clearTimeout(this.phaseTimer);
     const bot = this.state.players.get(this.botId);
     if (bot) bot.isBot = true; // the only moment this is ever sent
+    for (const player of this.all()) player.realName = this.lobbyNames.get(player.id) ?? "";
     this.state.winner = this.pendingWinner;
     this.state.phase = "reveal";
     this.state.phaseEndsAt = 0;
@@ -253,7 +272,7 @@ export class FindTheBotRoom extends Room<GameState> {
 
   private move(client: Client, message: Record<string, unknown>): void {
     if (this.state.phase !== "minigame") return;
-    const player = this.state.players.get(client.sessionId);
+    const player = this.state.players.get(this.playerId(client.sessionId));
     if (!player || player.eliminated || !finite(message.x) || !finite(message.z)) return;
     const now = Date.now();
     // Nobody moves faster than a run. A longer step is cut short, not thrown away.
@@ -284,7 +303,7 @@ export class FindTheBotRoom extends Room<GameState> {
 
   private recordTuringResult(client: Client, message: Record<string, unknown>): void {
     if (this.state.phase !== "turing-check" || !finite(message.score) || this.turingDone.has(client.sessionId)) return;
-    const player = this.state.players.get(client.sessionId);
+    const player = this.state.players.get(this.playerId(client.sessionId));
     if (!player || player.eliminated) return;
     this.turingDone.add(client.sessionId); // one answer per check
     player.turingScore = clamp(Math.floor(message.score), 0, 100);
@@ -329,7 +348,7 @@ export class FindTheBotRoom extends Room<GameState> {
 
   private chat(client: Client, message: Record<string, unknown>): void {
     if (this.state.phase === "lobby" || this.state.phase === "loading" || typeof message.message !== "string") return;
-    const player = this.state.players.get(client.sessionId);
+    const player = this.state.players.get(this.playerId(client.sessionId));
     const text = message.message.trim().slice(0, 240);
     const now = Date.now();
     if (!player || player.eliminated || !text || now - (this.lastChatAt.get(player.id) ?? 0) < CHAT_GAP_MS) return;

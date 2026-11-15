@@ -12,6 +12,7 @@ const EMPTY: Snapshot = {
 };
 
 let room: Room | null = null;
+let matchSelfId = '';
 let livePlayers: LivePlayer[] = [];
 const positions = new PositionBuffer();
 function receiveState() {
@@ -46,7 +47,7 @@ function refresh() {
     status: 'connected',
     error: '',
     roomId: room.roomId,
-    selfId: room.sessionId,
+    selfId: state.phase === 'lobby' ? room.sessionId : matchSelfId,
     hostId: state.hostId,
     chat,
   });
@@ -74,10 +75,17 @@ export async function connect(mode: 'create' | 'join', displayName: string, code
     return;
   }
   room = joined;
+  matchSelfId = '';
   chat = [];
   positions.reset();
   livePlayers = [];
   joined.onStateChange(receiveState);
+  joined.onMessage('match_identity', (message: { playerId?: unknown }) => {
+    if (room !== joined || typeof message?.playerId !== 'string' || !message.playerId) return;
+    matchSelfId = message.playerId;
+    positions.reset();
+    refresh();
+  });
   joined.onMessage('chat', (message: { playerId?: unknown; message?: unknown }) => {
     if (typeof message?.playerId !== 'string' || typeof message?.message !== 'string') return;
     chat = [...chat, { key: chatKey++, playerId: message.playerId, message: message.message, round: snapshot.round }];
@@ -96,6 +104,7 @@ export async function connect(mode: 'create' | 'join', displayName: string, code
 export function leave() {
   const leaving = room;
   room = null;
+  matchSelfId = '';
   livePlayers = [];
   positions.reset();
   leaving?.leave();
