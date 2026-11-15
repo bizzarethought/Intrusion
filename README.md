@@ -93,7 +93,7 @@ The humans get `ceil(log2(humans))` vote-outs, minimum two. Catching the bot ear
 | --- | --- | --- |
 | **Red Light, Green Light** | Sprint between two rows of roses. Move while the big rose is watching and you go back to the start. | Reaction timing |
 | **Glass Bridge Memory** | The safe panels flash once. Then hop across from memory, one click per panel. A wrong panel shatters and drops you back on the bank. | Memory and accuracy |
-| **Pick a Side** | A would-you-rather. Cross the stepping stones from the middle platform to the red or the blue one before time runs out. | Decisions and crowd-following |
+| **Pick a Side** | A would-you-rather. Hop the stepping stones from the islet in the pond to the red bank or the blue bank before time runs out. | Decisions and crowd-following |
 | **Prompt Podium** | Type an answer to a prompt, then vote for the funniest one that isn't yours. | Humour and typing rhythm |
 
 The bot plays all four through the same movement checks as everyone else, with human-shaped delays: a beat late off the line, the occasional stop that comes too late, a misremembered panel, a late look at where the crowd went.

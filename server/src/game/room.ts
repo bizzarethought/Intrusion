@@ -10,7 +10,7 @@ import {
   VOTE_DURATION_MS,
   type Phase,
 } from "./constants.js";
-import { MINI_GAME_IDS, createMiniGame, type Host, type MiniGame } from "./minigames.js";
+import { MINI_GAME_IDS, createMiniGame, nextMiniGame, type Host, type MiniGame } from "./minigames.js";
 import { placementPoints, voteBudget, votedOut } from "./rules.js";
 import { matchAliases, shuffled } from "./identities.js";
 import { GameState, PlayerState } from "./schema.js";
@@ -46,8 +46,9 @@ export class FindTheBotRoom extends Room<GameState> {
   private finishers = 0;
   /** When the AI casts its vote. */
   private readonly bot = { voteAt: 0 };
-  /** The mini-game being played, and the ones still to come this match (shuffled, refilled when empty). */
+  /** The mini-game being played, the ones this match has had, and what is left of a fixed order (MINI_GAMES), if one is set. */
   private game: MiniGame = createMiniGame(MINI_GAME_IDS[0]);
+  private readonly played = new Set<string>();
   private pool: string[] = [];
   /** What a mini-game may ask of the room. */
   private readonly host: Host = {
@@ -215,14 +216,11 @@ export class FindTheBotRoom extends Room<GameState> {
     }
   }
 
-  /** Draws the next mini-game from the shuffled pool and sets everyone up for it. */
+  /** Takes the next mini-game in the rotation (or in the fixed order, if one is set) and sets everyone up for it. */
   private startRound(): void {
     this.state.round += 1;
-    if (!this.pool.length) {
-      const fixed = config.miniGames.filter((id) => (MINI_GAME_IDS as readonly string[]).includes(id));
-      this.pool = fixed.length ? [...fixed] : shuffled(MINI_GAME_IDS);
-    }
-    this.state.miniGame = this.pool.shift()!;
+    if (!this.pool.length) this.pool = config.miniGames.filter((id) => (MINI_GAME_IDS as readonly string[]).includes(id));
+    this.state.miniGame = this.pool.shift() ?? nextMiniGame(this.played);
     this.game = createMiniGame(this.state.miniGame);
     this.finishers = 0;
     this.pace.clear();

@@ -242,19 +242,21 @@ class GlassBridgeMemory implements MiniGame {
 // ----------------------------------------------------------------- Pick a Side
 
 /**
- * Three platforms in a pond: red on the left, blue on the right, and a grass one in the middle
- * where everyone starts, joined by a line of stepping stones. Standing on the red platform picks
- * the first answer, on the blue one the second. Mirrors SIDES in client/src/game/levels.ts.
+ * The pond level: the left bank is the red answer, the right bank the blue one. Everyone starts
+ * on a grass islet in the middle of the pond, and a row of stepping stones joins it to both banks.
+ * The crossing (stones and islet: between leftX and rightX, top and bottom) is neither side.
+ * Mirrors SIDES in client/src/game/levels.ts.
  */
 export const SIDES = {
-  /** The red platform is everything left of -edge; the blue one everything right of +edge. */
-  edge: 1.34,
-  /** The line of stepping stones. */
-  pathZ: 0.726,
-  /** Where everyone starts on the middle platform: four across, three rows. */
-  startX: [-0.49, -0.165, 0.165, 0.49],
-  startZ: [0.056, 0.67, 1.284],
-  minX: -2.89, maxX: 2.89, minZ: -0.15, maxZ: 2.0,
+  leftX: -0.55, rightX: 2.447, top: -0.865, bottom: 0.419, midX: 0.498,
+  /** The row of stepping stones. */
+  laneZ: -0.279,
+  /** Where everyone starts on the islet: four across, three rows, the middle row first. */
+  startX: [0.123, 0.373, 0.623, 0.873],
+  startZ: [-0.223, -0.463, 0.017],
+  /** Grass on each bank where the AI may come to rest: [x from, x to, z from, z to]. */
+  rest: { A: [-1.99, -1.24, -1.0, 0.0], B: [2.61, 3.09, -0.28, 0.17] },
+  minX: -3.2, maxX: 3.2, minZ: -1.6, maxZ: 2.7,
 };
 const SIDE_PROMPTS: Array<[question: string, red: string, blue: string]> = [
   ["Would you rather...", "always be ten minutes late", "always be an hour early"],
@@ -269,9 +271,10 @@ const SIDE_PROMPTS: Array<[question: string, red: string, blue: string]> = [
   ["Would you rather...", "give up your phone for a month", "give up your bed for a month"],
 ];
 
-/** Which platform a player is standing on: "A" (red, left), "B" (blue, right) or "" (the middle or the stones). */
-export function sideOf(x: number): "A" | "B" | "" {
-  return x < -SIDES.edge ? "A" : x > SIDES.edge ? "B" : "";
+/** Which bank a player is standing on: "A" (red, left), "B" (blue, right) or "" (still on the crossing). */
+export function sideOf(x: number, z: number): "A" | "B" | "" {
+  const crossing = x > SIDES.leftX && x < SIDES.rightX && z > SIDES.top && z < SIDES.bottom;
+  return crossing ? "" : x < SIDES.midX ? "A" : "B";
 }
 
 /** Points for a would-you-rather: the bigger crowd scores most; a tie pays both; not choosing pays nothing. */
@@ -281,13 +284,13 @@ export function sidePoints(side: "A" | "B" | "", a: number, b: number): number {
   return (side === "A" ? a > b : b > a) ? 60 : 20;
 }
 
-/** A would-you-rather: walk to the platform you choose before time runs out. */
+/** A would-you-rather: cross to the bank you choose before time runs out. */
 class PickASide implements MiniGame {
   readonly readyMs = 6_000; // time to read the question
   readonly durationMs = 24_000;
   private decideAt = 0;
-  /** The AI's choice, when it sets off, and the spot on that platform it is heading for. */
-  private readonly ai = { goAt: 0, side: "A" as "A" | "B", reconsiderAt: 0, x: 2, z: 0.5 };
+  /** The AI's choice, when it sets off, and how far across its bank's resting place it will stop (0 to 1 each way). */
+  private readonly ai = { goAt: 0, side: "A" as "A" | "B", reconsiderAt: 0, across: 0.5, along: 0.5 };
 
   setup(host: Host, lineup: PlayerState[]): void {
     const [question, red, blue] = pick(SIDE_PROMPTS);
@@ -306,9 +309,8 @@ class PickASide implements MiniGame {
     this.ai.side = Math.random() < 0.5 ? "A" : "B";
     this.ai.goAt = now + between(2_500, 10_000);
     this.ai.reconsiderAt = now + between(12_000, 16_000);
-    // Somewhere on the platform, never the same spot twice.
-    this.ai.x = between(SIDES.edge + 0.35, SIDES.maxX - 0.3);
-    this.ai.z = between(SIDES.minZ + 0.5, SIDES.maxZ - 0.15);
+    this.ai.across = Math.random(); // somewhere on the bank, never the same spot twice
+    this.ai.along = Math.random();
   }
 
   move(host: Host, player: PlayerState, x: number, z: number): boolean {
@@ -321,9 +323,9 @@ class PickASide implements MiniGame {
   tick(host: Host, now: number): void {
     if (host.state.stage === "choose" && now >= this.decideAt) {
       const players = host.playing();
-      const a = players.filter((player) => sideOf(player.x) === "A").length;
-      const b = players.filter((player) => sideOf(player.x) === "B").length;
-      for (const player of players) player.score += sidePoints(sideOf(player.x), a, b);
+      const a = players.filter((player) => sideOf(player.x, player.z) === "A").length;
+      const b = players.filter((player) => sideOf(player.x, player.z) === "B").length;
+      for (const player of players) player.score += sidePoints(sideOf(player.x, player.z), a, b);
       host.state.board = JSON.stringify({ a, b });
       host.state.stage = "result";
       return;
@@ -334,15 +336,16 @@ class PickASide implements MiniGame {
       // A late look at where the crowd went; sometimes it follows.
       this.ai.reconsiderAt = Infinity;
       const others = host.playing().filter((player) => player !== bot);
-      const a = others.filter((player) => sideOf(player.x) === "A").length;
-      const b = others.filter((player) => sideOf(player.x) === "B").length;
+      const a = others.filter((player) => sideOf(player.x, player.z) === "A").length;
+      const b = others.filter((player) => sideOf(player.x, player.z) === "B").length;
       if (a !== b && Math.random() < 0.4) this.ai.side = a > b ? "A" : "B";
     }
-    // Down to the line of stones, along it, then to its spot on the platform.
-    const way = this.ai.side === "A" ? -1 : 1;
-    const arrived = sideOf(bot.x) === this.ai.side && Math.abs(bot.x) > SIDES.edge + 0.1;
-    const offStones = Math.abs(bot.z - SIDES.pathZ) > 0.05;
-    const [x, z] = arrived ? [way * this.ai.x, this.ai.z] : offStones ? [bot.x, SIDES.pathZ] : [way * (SIDES.edge + 0.15), SIDES.pathZ];
+    // Onto the row of stones, along it to the bank, then to its spot on the grass.
+    const [fromX, toX, fromZ, toZ] = SIDES.rest[this.ai.side];
+    const shore = this.ai.side === "A" ? SIDES.leftX - 0.45 : SIDES.rightX + 0.1; // the first footing on the bank
+    const arrived = this.ai.side === "A" ? bot.x <= shore + 0.02 : bot.x >= shore - 0.02;
+    const offStones = Math.abs(bot.z - SIDES.laneZ) > 0.05;
+    const [x, z] = arrived ? [fromX + (toX - fromX) * this.ai.across, fromZ + (toZ - fromZ) * this.ai.along] : offStones ? [bot.x, SIDES.laneZ] : [shore, SIDES.laneZ];
     stepToward(this, host, bot, x, z, 1.3, now);
   }
 
@@ -471,6 +474,28 @@ class PromptPodium implements MiniGame {
 
 export const MINI_GAME_IDS = ["red-light-green-light", "glass-bridge-memory", "pick-a-side", "prompt-podium"] as const;
 export type MiniGameId = (typeof MINI_GAME_IDS)[number];
+
+/** Mini-games still to come before any of them repeats. Shared by every match on this server, so matches played back to back get different games. */
+let upcoming: string[] = [];
+let lastDrawn = "";
+
+/**
+ * The next mini-game for a match that has already had `played` (which this adds to): the next
+ * one in the shared rotation that this match has not played yet.
+ */
+export function nextMiniGame(played: Set<string>): string {
+  if (played.size >= MINI_GAME_IDS.length) played.clear();
+  let index = upcoming.findIndex((id) => !played.has(id));
+  if (index < 0) {
+    const fresh = shuffled(MINI_GAME_IDS);
+    if (fresh[0] === lastDrawn) fresh.push(fresh.shift()!); // a new shuffle never opens with the game just played
+    upcoming.push(...fresh);
+    index = upcoming.findIndex((id) => !played.has(id));
+  }
+  [lastDrawn] = upcoming.splice(index, 1);
+  played.add(lastDrawn);
+  return lastDrawn;
+}
 
 export function createMiniGame(id: string): MiniGame {
   if (id === "glass-bridge-memory") return new GlassBridgeMemory();

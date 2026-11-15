@@ -32,7 +32,7 @@ export const MINI_GAMES: Record<string, MiniGame> = {
   },
   'pick-a-side': {
     name: 'Pick a Side',
-    how: 'A would-you-rather. Walk to the red or the blue platform before time runs out.',
+    how: 'A would-you-rather. Cross the stones to the red bank or the blue bank before time runs out.',
   },
   'prompt-podium': {
     name: 'Prompt Podium',

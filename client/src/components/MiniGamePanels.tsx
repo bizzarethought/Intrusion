@@ -14,36 +14,21 @@ function parseBoard<T>(board: string, fallback: T): T {
 }
 
 /**
- * Pick a Side: the question, with each answer on a square sign at the back of its platform, in
- * the platform's colour. The sign for the platform you are standing on is marked, and the middle
- * says what your pick is.
+ * Pick a Side: the question and both answers in their bank's colour, with yours marked. Kept to
+ * two short rows, clear of the robots' name tags. The answers also stand on signboards in the
+ * level, one on each bank, where the counts appear.
  */
 export function SidePanel({ game }: { game: Snapshot }) {
   const { side } = useWorldHud();
-  const counts = parseBoard<{ a?: number; b?: number }>(game.board, {});
-  const decided = game.stage === 'result';
-  const winner = decided && counts.a !== counts.b ? ((counts.a ?? 0) > (counts.b ?? 0) ? 'a' : 'b') : '';
-  const watching = Boolean(game.players.find((player) => player.id === game.selfId)?.eliminated);
-  const option = (key: 'a' | 'b', text: string, count = 0) => (
-    <p className={`sides__option sides__option--${key}${side === key ? ' sides__option--here' : ''}${winner === key ? ' sides__option--won' : ''}`}>
-      <small>{key === 'a' ? 'Red' : 'Blue'}</small>
-      {text}
-      {decided && <strong>{count}</strong>}
-      {side === key && <span className="sides__here">You are here</span>}
-    </p>
+  const answer = (key: 'a' | 'b', text: string) => (
+    <span className={`sides__answer sides__answer--${key}${side === key ? ' sides__answer--mine' : ''}`}>
+      {text}{side === key && <strong> · your pick</strong>}
+    </span>
   );
   return (
     <section className="sides" aria-label="Pick a side" aria-live="polite">
-      {option('a', game.optionA, counts.a)}
-      <div className="sides__middle">
-        <h2 className="sides__question">{game.prompt}</h2>
-        {!watching && (
-          <p className={`sides__status${side ? '' : ' sides__status--none'}`}>
-            {side ? `Your pick: ${side === 'a' ? game.optionA : game.optionB}` : 'No pick yet. Walk to red or blue.'}
-          </p>
-        )}
-      </div>
-      {option('b', game.optionB, counts.b)}
+      <h2 className="sides__question">{game.prompt}</h2>
+      <p className="sides__answers">{answer('a', game.optionA)}<span>or</span>{answer('b', game.optionB)}</p>
     </section>
   );
 }

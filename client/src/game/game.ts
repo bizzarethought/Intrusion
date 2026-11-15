@@ -5,7 +5,7 @@ import { Application, Assets, Container, Graphics, Sprite, Texture, Rectangle } 
 import { variantFor } from '../assets/looks';
 import { VARIANTS } from '../assets/manifest';
 import { play } from '../audio';
-import { live, onCaught, send } from '../protocol/roomClient';
+import { getSnapshot, live, onCaught, send } from '../protocol/roomClient';
 import { clearWorldHud, setWorldHud } from '../scene/worldHud';
 import { BRIDGE, DEPTH_SQUASH, LEVEL_FOR_GAME, LEVEL_HEIGHT, LEVEL_WIDTH, RLGL, SIDES, bankAt, loadLevel, onGround, platformAt, toMeters, toPixels, walkable, type Level, type LevelId, type Spot } from './levels';
 import { ANCHOR, BODY_HEIGHT, CELL, botSheet, loadedSheetCount } from './sprites';
@@ -20,7 +20,7 @@ export type GameScene = 'attract' | 'lobby' | 'play';
 
 const WALK_SPEED = 1.5; // metres per second
 const SEND_EVERY = 1 / 15; // seconds between movement messages to the server
-const MOSS = 0x10190f; // shown only until the level's picture has loaded
+const MOSS = '#10190f'; // shown only until the level's picture has loaded
 const HOP = 0.28; // seconds in the air between two stepping stones or glass panels
 /** Centre of a glass panel from its "column:row" name. */
 const panelAt = (key: string): Spot => {
@@ -54,6 +54,44 @@ type Bot = {
   hopAt: number;
 };
 
+/**
+ * Pick a Side: a signboard for one answer, in its bank's colour. Drawn at twice the size it stands
+ * at, so the words stay sharp. `count` is the number who chose it, once choices are counted.
+ */
+function signTexture(colour: string, name: string, text: string, count: number | null, here: boolean, won: boolean): Texture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 520; canvas.height = 600;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#4a3220'; // two posts, so it stands on its bank
+  ctx.fillRect(110, 480, 28, 120); ctx.fillRect(382, 480, 28, 120);
+  ctx.fillStyle = colour;
+  ctx.strokeStyle = here || won ? '#f2c230' : '#fff';
+  ctx.lineWidth = here ? 24 : 12;
+  ctx.beginPath(); ctx.roundRect(14, 14, 492, 492, 36); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#fff'; ctx.textAlign = 'center';
+  ctx.font = '800 30px system-ui, sans-serif';
+  ctx.fillText(name, 260, 76);
+  ctx.font = '800 62px Fraunces, Georgia, serif';
+  const lines: string[] = [];
+  let line = '';
+  for (const word of text.split(' ')) {
+    const longer = line ? `${line} ${word}` : word;
+    if (line && ctx.measureText(longer).width > 440) { lines.push(line); line = word; } else line = longer;
+  }
+  lines.push(line);
+  const middle = count !== null || here ? 232 : 285;
+  lines.forEach((words, i) => ctx.fillText(words, 260, middle + 20 + (i - (lines.length - 1) / 2) * 66));
+  if (count !== null) {
+    ctx.font = '900 120px Fraunces, Georgia, serif';
+    ctx.fillText(String(count), 260, 465);
+  } else if (here) {
+    ctx.beginPath(); ctx.roundRect(100, 404, 320, 56, 28); ctx.fill();
+    ctx.fillStyle = '#10190f'; ctx.font = '800 28px system-ui, sans-serif';
+    ctx.fillText('YOU ARE HERE', 260, 442);
+  }
+  return Texture.from(canvas);
+}
+
 export async function createGame(canvas: HTMLCanvasElement) {
   const app = new Application();
   await app.init({ canvas, width: innerWidth, height: innerHeight, resolution: Math.min(devicePixelRatio, 1.5), autoDensity: true, background: MOSS, preference: 'webgl', autoStart: false, antialias: false });
@@ -84,6 +122,13 @@ export async function createGame(canvas: HTMLCanvasElement) {
   actors.sortableChildren = true;
   let occluders: Sprite[] = [];
   let foregroundTexture: Texture | undefined;
+  // Pick a Side: the red answer's signboard and the blue one's, standing among the robots.
+  const signs = SIDES.signs.map(([x, y]) => {
+    const sign = new Sprite(); sign.anchor.set(0.5, 1); sign.scale.set(0.5); sign.position.set(x, y); sign.zIndex = y; sign.visible = false;
+    return actors.addChild(sign);
+  });
+  const signKeys = ['', ''];
+  let mySide = '';
   world.addChild(background, platforms, bridgeArt, actors, labels, wash);
   app.stage.addChild(world);
   const fx = createFx();
@@ -128,6 +173,7 @@ export async function createGame(canvas: HTMLCanvasElement) {
     const ratio = Math.min(devicePixelRatio, 1.5);
     app.renderer.resolution = ratio;
     app.renderer.resize(innerWidth, innerHeight);
+    view.scale = Math.max(innerWidth / LEVEL_WIDTH, innerHeight / LEVEL_HEIGHT);
   }
   addEventListener('resize', resize);
   resize();
@@ -247,8 +293,8 @@ export async function createGame(canvas: HTMLCanvasElement) {
     if (bot.eliminated) objective = 'You were voted out. You can still watch.';
     else if (level.id === 'podium') objective = ''; // the answer panel says what to do
     else if (level.id === 'side') {
-      objective = !playing ? 'Read the question. Red is one answer, blue is the other.'
-        : state.stage === 'choose' ? 'Cross the stones to the red or the blue platform before time runs out.' : 'Choices are locked in.';
+      objective = !playing ? 'Read the question. The red bank is one answer, the blue bank is the other.'
+        : state.stage === 'choose' ? 'Hop across the stones to the red bank or the blue bank before time runs out.' : 'Choices are locked in.';
     } else if (bridge) {
       objective = !playing ? 'Memorise the lit panels. When they go dark, click a panel to hop onto it.'
         : me.finished ? 'You crossed. Watch who remembers, and who guesses.'
@@ -270,7 +316,8 @@ export async function createGame(canvas: HTMLCanvasElement) {
     }
     if (time > resultUntil) result = '';
     // Pick a Side: which platform we are on, by the same line the server counts with.
-    const side = level.id !== 'side' || bot.eliminated ? '' : bankAt(local.x);
+    const side = level.id !== 'side' || bot.eliminated ? '' : bankAt(local.x, local.y);
+    mySide = side;
     setWorldHud({ objective, signal: playing ? state.signal : null, result, side });
   }
 
@@ -422,7 +469,7 @@ export async function createGame(canvas: HTMLCanvasElement) {
         perch = panel.key;
       } else if (free && level.id === 'side' && !onGround(level, bot.x, bot.y)) {
         const stone = SIDES.stones.reduce((best, each) => (Math.abs(each[0] - bot.x) < Math.abs(best[0] - bot.x) ? each : best));
-        rest = { x: stone[0] + ((index % 3) - 1) * 14, y: stone[1] + (index % 2) * 8 - 4 }; // a little apart when several share a stone
+        rest = { x: stone[0] + ((index % 3) - 1) * 28, y: stone[1] + (index % 2) * 10 - 5 }; // a little apart when several share a stone
         perch = String(stone[0]);
       }
       if (perch !== bot.perch) {
@@ -450,19 +497,15 @@ export async function createGame(canvas: HTMLCanvasElement) {
     taps = []; click = null;
 
     // Follow the local player on a mini-game level. Under the oak, and while everyone memorises the
-    // bridge (all seven columns should be in view), frame the middle of the level instead. Pick a Side
-    // always shows its whole width, both platforms: the level shrinks to fit a narrow window, with pond above and below.
+    // bridge (all seven columns should be in view), frame the middle of the level instead.
     const self = [...bots.values()].find((bot) => bot.isSelf);
-    const whole = free && level.id === 'side';
-    view.scale = whole ? innerWidth / LEVEL_WIDTH : Math.max(innerWidth / LEVEL_WIDTH, innerHeight / LEVEL_HEIGHT);
-    app.renderer.background.color = whole ? SIDES.water : MOSS;
-    const overview = !free || !self || whole || (level.id === 'bridge' && state.phase === 'travel');
+    const overview = !free || !self || (level.id === 'bridge' && state.phase === 'travel');
     const focus = overview ? { x: LEVEL_WIDTH / 2, y: LEVEL_HEIGHT / 2 } : self.shown;
     const ease = fresh ? 1 : Math.min(1, dt * 4);
     camera.x += (focus.x - camera.x) * ease;
     camera.y += (focus.y - camera.y) * ease;
     view.left = Math.min(0, Math.max(innerWidth - LEVEL_WIDTH * view.scale, innerWidth / 2 - camera.x * view.scale));
-    view.top = whole ? (innerHeight - LEVEL_HEIGHT * view.scale) / 2 : Math.min(0, Math.max(innerHeight - LEVEL_HEIGHT * view.scale, innerHeight / 2 - camera.y * view.scale));
+    view.top = Math.min(0, Math.max(innerHeight - LEVEL_HEIGHT * view.scale, innerHeight / 2 - camera.y * view.scale));
     world.scale.set(view.scale); world.position.set(view.left, view.top);
     if (drawnLevel !== level) {
       backgroundTexture?.destroy(true);
@@ -520,6 +563,22 @@ export async function createGame(canvas: HTMLCanvasElement) {
       const { x, y } = panelAt(key);
       platforms.roundRect(x - BRIDGE.panelWidth / 2 - 6, y - BRIDGE.panelHeight / 2 - 6, BRIDGE.panelWidth + 12, BRIDGE.panelHeight + 14, 6).fill(0x2f7090);
     }
+    // Pick a Side: each signboard shows its answer, marks the bank we stand on, and then the count.
+    signs.forEach((sign, i) => {
+      sign.visible = free && level.id === 'side';
+      if (!sign.visible) return;
+      const { optionA, optionB, stage, board } = getSnapshot();
+      const here = mySide === 'ab'[i];
+      const key = `${i ? optionB : optionA}|${stage === 'result' ? board : ''}|${here}`;
+      if (key === signKeys[i]) return;
+      let counts: { a?: number; b?: number } | null = null;
+      try { if (stage === 'result') counts = JSON.parse(board); } catch { /* no counts to show */ }
+      const count = counts ? (i ? counts.b : counts.a) ?? 0 : null;
+      const won = counts !== null && count! > ((i ? counts.a : counts.b) ?? 0);
+      if (signKeys[i]) sign.texture.destroy(true);
+      sign.texture = signTexture(i ? '#1f5fe0' : '#d81f2b', i ? 'BLUE' : 'RED', i ? optionB : optionA, count, here, won);
+      signKeys[i] = key;
+    });
     // Where the local player can hop next: both panels of the next column, or the far bank.
     if (onBridge && nextColumn >= 0) {
       const glow = { width: 5, color: 0xffffff, alpha: 0.55 + Math.sin(time * 5) * 0.3 };

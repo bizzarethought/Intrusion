@@ -67,91 +67,109 @@ export function platformAt(x: number, y: number): { col: number; row: number; ke
 }
 
 /**
- * Pick a Side: three platforms in a pond. Red on the left and blue on the right are the two
- * answers; everyone starts on the grass one in the middle, and a line of stepping stones joins
- * them. Mirrors SIDES in server/src/game/minigames.ts.
+ * Pick a Side, on the rendered pond: the left bank is the red answer, the right bank and the
+ * meadow below it the blue one. Everyone starts on a grass islet in the middle of the pond, and a
+ * row of stepping stones joins it to both banks. The crossing (stones and islet, between leftX and
+ * rightX, top and bottom) is neither side. Mirrors SIDES in server/src/game/minigames.ts.
  */
 export const SIDES = {
-  red: { x: 90, y: 470, width: 480, height: 440 },
-  blue: { x: 1350, y: 470, width: 480, height: 440 },
-  middle: { x: 770, y: 500, width: 380, height: 340 },
-  pathY: 670,
-  stones: [[620, 670], [720, 670], [1200, 670], [1300, 670]],
-  /** The back of each coloured platform is kept clear, so a name tag never hides behind the answer sign above it. */
-  signStrip: 100,
-  water: 0x2f8fc2, // the pond, also shown above and below the level in a tall window
+  leftX: 800,
+  rightX: 1672,
+  top: 385,
+  bottom: 615,
+  midX: 1105,
+  /** The strip of water the stepping stones stand in. */
+  stonesTop: 440,
+  stonesBottom: 545,
+  stones: [[700, 480], [900, 470], [1310, 505], [1512, 478]],
+  islet: { x: 1105, y: 500, rx: 180, ry: 115 },
+  /** The land that wraps round the bottom of the pond is out of play: left of `gapX`, nothing below `gapY`. The stones are the only way across. */
+  gapX: 1120,
+  gapY: 720,
+  /** Where each answer's signboard stands (the middle of its foot). */
+  signs: [[300, 640], [1420, 805]],
 };
 
-/** Pick a Side: the platform a position counts for ('a' red, 'b' blue), or '' in the middle or on the stones. Same test as the server's sideOf. */
-export function bankAt(x: number): '' | 'a' | 'b' {
-  return x < SIDES.red.x + SIDES.red.width ? 'a' : x > SIDES.blue.x ? 'b' : '';
+/**
+ * Pick a Side: the bank a position counts for ('a' red, 'b' blue), or '' on the crossing.
+ * The same test as the server's sideOf.
+ */
+export function bankAt(x: number, y: number): '' | 'a' | 'b' {
+  const crossing = x > SIDES.leftX && x < SIDES.rightX && y > SIDES.top && y < SIDES.bottom;
+  return crossing ? '' : x < SIDES.midX ? 'a' : 'b';
 }
 
 /**
- * Pick a Side is drawn here, not rendered: the art pass had one pond with uneven banks, and the
- * game needs two clear places to stand. The platforms and stones are cut from that picture's own
- * grass and stones, so it still belongs with the other levels.
+ * Pick a Side keeps the rendered picture and adds two things to it: the grass of each bank takes
+ * its answer's colour (blades and light kept, so it is still the same meadow), and a grass islet,
+ * cut from the picture's own grass, replaces the middle stepping stone as the place to start.
  */
-function sideBoard(art: HTMLImageElement): Pick<Level, 'image' | 'collision' | 'foreground' | 'occluders'> {
+function sideGround(art: HTMLImageElement, ground: Uint8Array | null, foreground: HTMLImageElement | null): Pick<Level, 'image' | 'collision'> {
   const image = document.createElement('canvas');
   image.width = LEVEL_WIDTH; image.height = LEVEL_HEIGHT;
   const ctx = image.getContext('2d')!;
-  const water = ctx.createLinearGradient(0, 0, 0, LEVEL_HEIGHT);
-  // The top and bottom edges match SIDES.water, which fills the rest of a tall window.
-  water.addColorStop(0, '#2f8fc2'); water.addColorStop(0.45, '#46a8d6'); water.addColorStop(1, '#2f8fc2');
-  ctx.fillStyle = water; ctx.fillRect(0, 0, LEVEL_WIDTH, LEVEL_HEIGHT);
+  ctx.drawImage(art, 0, 0);
+  const collision = ground ? Uint8Array.from(ground) : new Uint8Array(COLLISION_WIDTH * COLLISION_HEIGHT).fill(1);
 
-  // The picture's own grass, laid down as soft overlapping patches, so it never repeats in a pattern.
-  const patch = document.createElement('canvas');
-  patch.width = 160; patch.height = 120;
-  const patchCtx = patch.getContext('2d')!;
-  let seed = 11;
-  const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  const platform = ({ x, y, width, height }: typeof SIDES.red, colour: string | null, side: string) => {
-    ctx.fillStyle = side; // the platform's edge, so it stands out of the water
-    ctx.beginPath(); ctx.roundRect(x, y + 22, width, height, 26); ctx.fill();
-    ctx.save();
-    ctx.beginPath(); ctx.roundRect(x, y, width, height, 26); ctx.clip();
-    ctx.fillStyle = '#3d6a22'; ctx.fillRect(x, y, width, height);
-    for (let i = 0; i < (width * height) / 1400; i++) {
-      patchCtx.globalCompositeOperation = 'source-over';
-      patchCtx.clearRect(0, 0, 160, 120);
-      patchCtx.drawImage(art, 520 + random() * 140, 70 + random() * 110, 160, 120, 0, 0, 160, 120);
-      const fade = patchCtx.createRadialGradient(80, 60, 25, 80, 60, 80);
-      fade.addColorStop(0, '#000'); fade.addColorStop(1, 'transparent');
-      patchCtx.globalCompositeOperation = 'destination-in';
-      patchCtx.fillStyle = fade; patchCtx.fillRect(0, 0, 160, 120);
-      ctx.drawImage(patch, x - 80 + random() * width, y - 60 + random() * height);
+  // Each bank's ground in its colour. The mask is the bank's walkable ground, soft at the edges,
+  // fading out where the land runs on out of play instead of stopping at a line.
+  const bank = (side: 'a' | 'b', colour: string) => {
+    const mask = document.createElement('canvas');
+    mask.width = COLLISION_WIDTH; mask.height = COLLISION_HEIGHT;
+    const maskCtx = mask.getContext('2d')!;
+    for (let row = 0; row < COLLISION_HEIGHT; row++) for (let column = 0; column < COLLISION_WIDTH; column++) {
+      const x = column * 4, y = row * 4;
+      if (!collision[row * COLLISION_WIDTH + column] || bankAt(x, y) !== side) continue;
+      const fade = side === 'a' ? (SIDES.gapY + 40 - y) / 70 : y > SIDES.gapY ? (x - SIDES.gapX + 20) / 120 : 1;
+      if (fade <= 0) continue;
+      maskCtx.fillStyle = `rgba(0,0,0,${Math.min(1, fade)})`;
+      maskCtx.fillRect(column, row, 1, 1);
     }
-    if (colour) {
-      // The grass keeps its blades and light, and takes the answer's colour.
-      ctx.globalCompositeOperation = 'color'; ctx.fillStyle = colour; ctx.fillRect(x, y, width, height);
-      ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 0.45; ctx.fillRect(x, y, width, height);
-      ctx.globalAlpha = 1;
-    }
-    ctx.restore();
-    ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 5;
-    ctx.beginPath(); ctx.roundRect(x + 4, y + 4, width - 8, height - 8, 22); ctx.stroke();
+    const layer = document.createElement('canvas');
+    layer.width = LEVEL_WIDTH; layer.height = LEVEL_HEIGHT;
+    const layerCtx = layer.getContext('2d')!;
+    layerCtx.drawImage(art, 0, 0);
+    layerCtx.globalCompositeOperation = 'color'; layerCtx.fillStyle = colour; layerCtx.fillRect(0, 0, LEVEL_WIDTH, LEVEL_HEIGHT);
+    layerCtx.globalCompositeOperation = 'source-over'; layerCtx.globalAlpha = 0.42; layerCtx.fillRect(0, 0, LEVEL_WIDTH, LEVEL_HEIGHT);
+    layerCtx.globalAlpha = 1; layerCtx.globalCompositeOperation = 'destination-in';
+    layerCtx.filter = 'blur(7px)'; // where a browser has no canvas filter the edge is just crisper
+    layerCtx.drawImage(mask, 0, 0, LEVEL_WIDTH, LEVEL_HEIGHT);
+    layerCtx.filter = 'none';
+    // Roses and boulders keep their own colours, wherever they overhang the grass.
+    if (foreground) { layerCtx.globalCompositeOperation = 'destination-out'; layerCtx.drawImage(foreground, 0, 0); }
+    ctx.drawImage(layer, 0, 0);
   };
-  platform(SIDES.red, '#e8232f', '#6e1016');
-  platform(SIDES.blue, '#2468f2', '#102c78');
-  platform(SIDES.middle, null, '#3b2a18');
-  // The picture's second stepping stone (a short cylinder at 902, 455), stamped along the path.
-  for (const [x, y] of SIDES.stones) {
-    ctx.save();
-    ctx.translate(x, y); ctx.scale(0.62, 0.62);
-    ctx.beginPath(); ctx.ellipse(0, 0, 68, 39, 0, Math.PI, 0); ctx.lineTo(68, 26); ctx.ellipse(0, 26, 68, 39, 0, 0, Math.PI); ctx.closePath();
-    ctx.clip();
-    ctx.drawImage(art, 902 - 80, 455 - 50, 160, 130, -80, -50, 160, 130);
-    ctx.restore();
+  bank('a', '#e8232f');
+  bank('b', '#2468f2');
+
+  // The islet: an uneven round of the bank's grass on a rim of dark soil, like the banks have.
+  const { x, y, rx, ry } = SIDES.islet;
+  const shore = (grow: number) => {
+    ctx.beginPath();
+    for (let step = 0; step <= 48; step++) {
+      const angle = (step / 48) * Math.PI * 2;
+      const wobble = 1 + 0.06 * Math.sin(angle * 3 + 1) + 0.04 * Math.sin(angle * 7 + 2);
+      ctx.lineTo(x + Math.cos(angle) * (rx + grow) * wobble, y + Math.sin(angle) * (ry + grow) * wobble);
+    }
+    ctx.closePath();
+  };
+  ctx.save();
+  ctx.filter = 'blur(10px)'; ctx.fillStyle = 'rgba(8,30,48,0.45)'; ctx.translate(0, 20); shore(6); ctx.fill(); // its shadow on the water
+  ctx.restore(); ctx.save();
+  ctx.filter = 'blur(2px)'; ctx.fillStyle = '#2b1d10'; ctx.translate(0, 12); shore(2); ctx.fill(); // soil
+  ctx.restore(); ctx.save();
+  const turf = document.createElement('canvas');
+  turf.width = rx * 2 + 40; turf.height = ry * 2 + 40;
+  const turfCtx = turf.getContext('2d')!;
+  turfCtx.drawImage(art, 470, 70, turf.width, turf.height, 0, 0, turf.width, turf.height);
+  shore(0); ctx.clip();
+  ctx.drawImage(turf, x - turf.width / 2, y - turf.height / 2);
+  ctx.restore();
+  // Solid ground a little inside its shore, so nobody stands half off it.
+  for (let row = Math.floor((y - ry) / 4); row <= (y + ry) / 4; row++) for (let column = Math.floor((x - rx) / 4); column <= (x + rx) / 4; column++) {
+    if (((column * 4 - x) / (rx - 25)) ** 2 + ((row * 4 - y) / (ry - 22)) ** 2 <= 1) collision[row * COLLISION_WIDTH + column] = 1;
   }
-  const collision = new Uint8Array(COLLISION_WIDTH * COLLISION_HEIGHT);
-  for (const { x, y, width, height } of [SIDES.red, SIDES.blue, SIDES.middle]) {
-    // A little inside the edge, so nobody stands half off a platform.
-    const top = y + (y === SIDES.middle.y ? 12 : SIDES.signStrip);
-    for (let row = Math.ceil(top / 4); row < (y + height - 12) / 4; row++) collision.fill(1, row * COLLISION_WIDTH + Math.ceil((x + 16) / 4), row * COLLISION_WIDTH + Math.floor((x + width - 16) / 4));
-  }
-  return { image, collision, foreground: null, occluders: [] };
+  return { image, collision };
 }
 
 /** Solid ground by the level's collision map: white is ground; black is water, boulders and trunks. */
@@ -165,8 +183,11 @@ export function onGround(level: Level, x: number, y: number): boolean {
 export function walkable(level: Level, x: number, y: number): boolean {
   // Keep the whole robot and its name in the picture.
   if (x < 30 || x > LEVEL_WIDTH - 30 || y < 250 || y > LEVEL_HEIGHT - 60) return false;
-  // The line of stepping stones crosses open water. A robot on it is drawn on the nearest stone (see the game view).
-  if (level.id === 'side' && Math.abs(y - SIDES.pathY) < 40 && x > SIDES.red.x + SIDES.red.width - 20 && x < SIDES.blue.x + 20) return true;
+  if (level.id === 'side') {
+    if (x < SIDES.gapX && y > SIDES.gapY) return false;
+    // The row of stepping stones stands in open water. A robot in this strip is drawn on the nearest stone (see the game view), never in the water.
+    if (x >= 640 && x <= SIDES.rightX + 20 && y > SIDES.stonesTop && y < SIDES.stonesBottom) return true;
+  }
   return onGround(level, x, y);
 }
 
@@ -223,7 +244,7 @@ export function loadLevel(id: LevelId): Promise<Level> {
         id, image, foreground, occluders, collision,
         pixelsPerMeter: file.pixels_per_meter ?? 270, botHeight: file.bot_height_px ?? 165, spawns,
         watcher: rose ? { x: rose[0], y: rose[1] } : null,
-        ...(id === 'side' ? sideBoard(image) : {}),
+        ...(id === 'side' ? sideGround(image, collision, foreground) : {}),
       };
     })();
     cache.set(id, pending);

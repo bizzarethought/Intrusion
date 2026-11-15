@@ -172,20 +172,13 @@
 
 /* Pick a Side: the question in the middle, each answer on the side you walk to for it.
    Each bank has a colour (the bank glows in it in the level), and the bank you are on is marked. */
-.sides { position: absolute; inset: 0; pointer-events: none; z-index: 3; --card: min(13vw, 24vh); }
-.sides__middle { position: absolute; top: 84px; left: 50%; translate: -50% 0; display: flex; flex-direction: column; align-items: center; gap: 8px; width: max-content; max-width: 44vw; }
+.sides { position: absolute; top: 84px; left: 50%; translate: -50% 0; display: flex; flex-direction: column; align-items: center; gap: 8px; width: max-content; max-width: calc(100vw - 24px); pointer-events: none; z-index: 3; }
 .sides__question { padding: 8px 18px; background: var(--petal); border: 2.5px solid var(--moss); border-radius: var(--leaf-corners-small); box-shadow: var(--press); font-size: 22px; }
-.sides__status { padding: 5px 14px; background: var(--moss); color: var(--petal); border-radius: 999px; font: 700 14px var(--body); text-align: center; }
-.sides__status--none { background: #401b1d; color: #ffd4c9; }
-/* Each answer is a square sign standing at the back of its platform. The level is drawn at the window's full width, so 1vw is 19.2 pixels of the level. */
-.sides__option { position: absolute; top: calc(50% - 9.9vw); translate: -50% -100%; box-sizing: border-box; width: var(--card); height: var(--card); margin: 0; padding: calc(var(--card) * 0.07); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: calc(var(--card) * 0.04); text-align: center; color: #fff; border: calc(var(--card) * 0.025) solid #fff; border-radius: calc(var(--card) * 0.08); box-shadow: 0 6px 0 #0005; font: 800 calc(var(--card) * 0.125)/1.1 var(--display); text-wrap: balance; transition: scale .15s; }
-.sides__option small { font: 800 calc(var(--card) * 0.075) var(--body); letter-spacing: .12em; text-transform: uppercase; opacity: .85; }
-.sides__option strong { font-size: calc(var(--card) * 0.24); line-height: 1; }
-.sides__option--a { left: 17.19vw; background: #d81f2b; }
-.sides__option--b { left: 82.81vw; background: #1f5fe0; }
-.sides__option--here { border-color: var(--dandelion); scale: 1.08; box-shadow: 0 6px 0 #0005, 0 0 0 calc(var(--card) * 0.03) var(--dandelion); }
-.sides__option--won { border-color: var(--dandelion); }
-.sides__here { padding: 2px 10px; background: #fff; color: var(--moss); border-radius: 999px; font: 800 calc(var(--card) * 0.065) var(--body); letter-spacing: .06em; text-transform: uppercase; }
+.sides__answers { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; margin: 0; color: #fff; font: 700 14px var(--body); text-shadow: 0 1px 2px #000a; }
+.sides__answer { padding: 5px 14px; border: 2px solid #fff; border-radius: 999px; font: 800 15px var(--body); text-shadow: none; }
+.sides__answer--a { background: #d81f2b; }
+.sides__answer--b { background: #1f5fe0; }
+.sides__answer--mine { border-color: var(--dandelion); box-shadow: 0 0 0 3px var(--dandelion); }
 
 /* The count-in before each mini-game. Below the middle: clear of the question cards and of the bridge panels players are memorising. */
 .countdown { position: absolute; top: 58%; left: 50%; translate: -50% 0; font: 900 clamp(90px, 15vw, 190px)/1 var(--display); font-variation-settings: 'SOFT' 100; color: var(--petal); -webkit-text-stroke: 3px var(--moss); text-shadow: 6px 8px 0 var(--moss); animation: count 1s both; pointer-events: none; z-index: 4; }
@@ -242,7 +235,7 @@
 @media (max-width: 900px) {
   .game .hud { grid-template-columns: 1fr auto; }
   .game .hud__side { grid-column: 1 / -1; }
-  .sides__middle { top: 124px; }
+  .sides { top: 124px; }
   .game .signal { top: 110px; }
   .game .toast { top: 155px; }
 }
