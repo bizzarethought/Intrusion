@@ -1,5 +1,6 @@
 import { Client, Room, generateId } from "colyseus";
-import { AiClient } from "../ai/client.js";
+import { AiClient, type BotContext } from "../ai/client.js";
+import { BotConversation, addressesBot } from "../ai/conversation.js";
 import {
   GET_READY_MS,
   LOADING_MS,
@@ -20,15 +21,6 @@ const SPEED_SLACK = 1.5; // how far over that a move may be before it is cut sho
 const RED_GRACE_MS = 400; // reaction time allowed after the light turns red
 const CHAT_GAP_MS = 600; // one chat message per player per this long
 const BOT_NAMES = ["Alex", "Sam", "Jordan", "Riley", "Casey", "Morgan", "Jamie", "Taylor", "Quinn", "Avery"];
-// What the AI says when no language model is configured or the call fails.
-const BOT_LINES = [
-  "honestly no idea who it is",
-  "i was just trying not to get caught lol",
-  "someone stopped way too perfectly on that last red",
-  "idk, im voting with whoever has a real reason",
-  "that round was rough for me",
-];
-
 const between = (min: number, max: number) => min + Math.random() * (max - min);
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 const pick = <T>(list: T[]): T => list[Math.floor(Math.random() * list.length)];
@@ -42,6 +34,7 @@ export class FindTheBotRoom extends Room<GameState> {
   state = new GameState();
 
   private readonly aiClient = new AiClient();
+  private readonly conversation = new BotConversation((context, signal) => this.aiClient.respond(context, signal));
   /** The AI player's id. Lives only on the server until the reveal. */
   private botId = "";
   private pendingWinner: "" | "humans" | "ai" = "";
@@ -53,7 +46,7 @@ export class FindTheBotRoom extends Room<GameState> {
   private finishers = 0;
   private signalSince = 0;
   /** How the AI plays this round and when it next acts. */
-  private readonly bot = { speed: 1.3, lane: 0, moving: false, switchAt: 0, voteAt: 0, chatAt: 0 };
+  private readonly bot = { speed: 1.3, lane: 0, moving: false, switchAt: 0, voteAt: 0 };
   private phaseTimer?: ReturnType<typeof setTimeout>;
   private signalTimer?: ReturnType<typeof setTimeout>;
   private tickTimer?: ReturnType<typeof setInterval>;
@@ -96,6 +89,7 @@ export class FindTheBotRoom extends Room<GameState> {
   }
 
   onDispose(): void {
+    this.conversation.stop();
     clearTimeout(this.phaseTimer);
     clearTimeout(this.signalTimer);
     clearInterval(this.tickTimer);
@@ -139,6 +133,7 @@ export class FindTheBotRoom extends Room<GameState> {
   }
 
   private beginPhase(phase: Phase, durationMs: number): void {
+    if (phase !== "voting") this.conversation.stop();
     this.state.phase = phase;
     this.state.phaseEndsAt = Date.now() + durationMs;
     clearTimeout(this.phaseTimer);
@@ -166,9 +161,9 @@ export class FindTheBotRoom extends Room<GameState> {
       case "turing-check": {
         this.votes.clear();
         const now = Date.now();
-        this.bot.chatAt = now + between(2_000, 7_000);
         this.bot.voteAt = now + between(5_000, VOTE_DURATION_MS * 0.6);
         this.beginPhase("voting", VOTE_DURATION_MS);
+        this.conversation.start();
         break;
       }
       case "voting":
@@ -204,6 +199,7 @@ export class FindTheBotRoom extends Room<GameState> {
   }
 
   private reveal(): void {
+    this.conversation.stop();
     clearTimeout(this.phaseTimer);
     const bot = this.state.players.get(this.botId);
     if (bot) bot.isBot = true; // the only moment this is ever sent
@@ -339,10 +335,14 @@ export class FindTheBotRoom extends Room<GameState> {
     if (!player || player.eliminated || !text || now - (this.lastChatAt.get(player.id) ?? 0) < CHAT_GAP_MS) return;
     this.lastChatAt.set(player.id, now);
     this.say(player, text);
+    const bot = this.state.players.get(this.botId);
+    if (this.state.phase === "voting" && bot && !bot.eliminated) {
+      this.conversation.hear({ name: player.displayName, message: text }, bot.displayName);
+    }
   }
 
   private say(player: PlayerState, text: string): void {
-    this.recentChat = [...this.recentChat, { name: player.displayName, message: text }].slice(-12);
+    this.recentChat = [...this.recentChat, { name: player.displayName, message: text }].slice(-20);
     this.broadcast("chat", { playerId: player.id, message: text });
   }
 
@@ -354,10 +354,9 @@ export class FindTheBotRoom extends Room<GameState> {
     if (this.state.phase !== "voting") return;
     const bot = this.state.players.get(this.botId);
     if (!bot || bot.eliminated) return;
-    if (this.bot.chatAt && now >= this.bot.chatAt) {
-      this.bot.chatAt = 0;
-      void this.botChat(bot);
-    }
+    this.conversation.tick(this.state.phaseEndsAt, () => this.botChatContext(bot), line => {
+      if (this.state.phase === "voting" && !bot.eliminated) this.say(bot, line);
+    });
     // The AI always votes, so a missing vote can't give it away.
     if (now >= this.bot.voteAt && !this.votes.has(bot.id)) {
       const humans = this.all().filter((player) => player.id !== bot.id && !player.eliminated);
@@ -365,21 +364,15 @@ export class FindTheBotRoom extends Room<GameState> {
     }
   }
 
-  private async botChat(bot: PlayerState): Promise<void> {
-    let line: string | null = null;
-    try {
-      line = await this.aiClient.respond({
-        botName: bot.displayName,
-        phase: this.state.phase,
-        round: this.state.round,
-        // Only what any player can see on their own screen.
-        visiblePlayers: this.all().map((player) => ({ name: player.displayName, score: player.score, eliminated: player.eliminated })),
-        recentChat: this.recentChat,
-        accusations: this.recentChat.filter((chat) => chat.message.toLowerCase().includes(bot.displayName.toLowerCase())).map((chat) => chat.message),
-      });
-    } catch (error) {
-      console.error("Bot chat failed", error);
-    }
-    if (this.state.phase === "voting" && !bot.eliminated) this.say(bot, line ?? pick(BOT_LINES));
+  private botChatContext(bot: PlayerState): BotContext {
+    return {
+      botName: bot.displayName,
+      phase: this.state.phase,
+      round: this.state.round,
+      // No hidden roles, individual votes, bot schedule, or private movement data.
+      visiblePlayers: this.all().map(player => ({ name: player.displayName, score: player.score, eliminated: player.eliminated })),
+      recentChat: [...this.recentChat],
+      accusations: this.recentChat.filter(chat => addressesBot(chat.message, bot.displayName)).map(chat => chat.message),
+    };
   }
 }

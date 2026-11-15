@@ -58,7 +58,7 @@ prints. The client connects to port 2567 on the page's hostname by default.
 
 ## Optional AI configuration
 
-The demo works without an AI service: the bot uses built-in chat lines.
+The demo works without an AI service: the bot uses simple contextual chat replies.
 To generate its voting-discussion chat with an OpenAI-compatible endpoint,
 create `server/.env` using `server/.env.example` as a template:
 
@@ -72,6 +72,13 @@ AI_MODEL=your-model-name
 `AI_BASE_URL` is the API prefix; the backend appends `/chat/completions`.
 An AMD-hosted model can be used through this interface. Missing configuration,
 failed requests, and timeouts use the built-in fallback.
+
+During voting, the bot can defend itself, answer questions, challenge accusations,
+and follow up using the last 20 chat messages, including its own replies. Direct
+mentions take priority. Responses have a short thinking delay and at least four
+seconds between messages, with at most five messages per voting round. Pending
+replies are canceled when voting ends. Without a configured model, the same
+conversation flow uses simple contextual templates rather than a full debate.
 
 The model currently generates **chat only**. The server scripts the bot's
 movement, reaction delays, occasional mistakes, and random votes. The bot's
@@ -89,7 +96,7 @@ devices; `localhost` on a phone points to the phone itself.
 | Rooms, host controls, multiplayer movement | Implemented with Colyseus |
 | Red Light, Green Light | Playable, with server movement checks and scoring |
 | Reaction checks, chat, voting, elimination, reveal | Implemented |
-| Bot chat | Optional model endpoint with built-in fallback |
+| Bot chat | Paced back-and-forth during voting; optional model endpoint with contextual fallback |
 | Main screen and lobby | Animated water, foliage, pollen, two static roses, and one opening/closing rose |
 | Arena rose | Opening/closing FX frames follow the server's red/green signal |
 | Glass Bridge, Prompt Podium, Pick a Side | Artwork and client mappings exist; game rules are not implemented |
