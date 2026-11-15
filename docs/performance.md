@@ -20,7 +20,7 @@ Validation: `cd client && npm run check && npm test && npm run build`. Interpola
 
 ## FX pack integration
 
-`elements/fx_pack` is the supplied art; the runtime copies live in `client/public/assets/fx`. `fx.ts` loads the manifest, packs the four foliage images into one shared GPU atlas, repacks water to 1536 × 1152 and rose frames to 2048 × 1536, and caches them between arena changes. Rose textures load only when Red Light, Green Light is shown.
+`elements/fx_pack` is the supplied art; the runtime copies live in `client/public/assets/fx`. `fx.ts` loads the manifest, packs the four foliage images into one shared GPU atlas, repacks water to 1536 × 1152 and rose frames to 2048 × 1536, and caches them between arena changes. The rose atlas is shared by the oak screen and Red Light, Green Light.
 
 The rose traverses its ten closed-to-open frames in 300 ms, with reversal from its current pose when the server signal changes. That closing duration fits within the server's 400 ms reaction grace. A ground sample, masked once with the open head's alpha, covers the open rose already baked into the background. The original background is preserved; a future clean background plate can replace this approximation.
 
@@ -35,3 +35,8 @@ Use `?perf=1` and inspect `window.intrusionFx` for live readiness, active level,
 The oak scene now uses stronger root-anchored foliage sway, a slow water current, six expanding pond rings, and up to 24 drifting pollen sprites (12 on narrow screens). Ring and pollen textures are drawn once and reused; no live blur filters are used. Including foliage, the scenery stays below 150 moving pieces. All added motion stops or hides in reduced-motion mode.
 
 A landing-page browser check compared screenshots of pond and grass regions that exclude the robot and UI. Over 1.4 seconds, approximately 2.3% of pond pixels and 39.4% of grass pixels changed above a visible color threshold. The same run measured 60 FPS and 0.72 ms average CPU frame work locally, with no page errors. Narrow-screen limits and reduced-motion behavior also passed. This verifies scenery movement rather than relying solely on advancing animation counters.
+
+
+The oak rose now uses the FX pack's ten transparent petal frames at a fixed position and scale. Its eight-second idle cycle holds closed, opens over one second, rests open, and closes over one second. The old transform-based background cutout has been removed. Only the stationary cover uses a mask of the baked-in rose; moving pixels come exclusively from the supplied FX atlas. Reduced-motion mode holds the open frame. Browser checks confirm distinct open/closed images with identical sprite scale and no page errors.
+
+The oak composition now has two static open roses (bank and far meadow) and one animated rose in clear foreground grass. All use the atlas's natural aspect ratio, with leafy bases. Per-frame petal bounds determine the anchor so the bottom of each bloom stays planted as it opens and closes. Browser validation confirmed two static roses, distinct animated endpoints, constant scale, and reduced-motion behavior without page errors.

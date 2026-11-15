@@ -1,6 +1,6 @@
 import { Container, Graphics, Rectangle, Sprite, Texture, TilingSprite } from 'pixi.js';
 import type { Level, LevelId } from './levels';
-import { insidePolygon, pingPongFrame, rosePose } from './fxMath';
+import { insidePolygon, pingPongFrame, rosePose, idleRoseFrame } from './fxMath';
 
 const ROOT = '/assets/fx/';
 const MAX_FOLIAGE = 96;
@@ -21,6 +21,25 @@ let configPromise: Promise<FxConfig> | undefined;
 let foliagePromise: Promise<Texture[]> | undefined;
 let waterPromise: Promise<Sheet> | undefined;
 let rosePromise: Promise<Sheet> | undefined;
+const roseAnchors = new WeakMap<Sheet, Array<[number, number]>>();
+/** Keep the base of the petals planted in one spot as the head changes shape. */
+function petalAnchors(sheet: Sheet): Array<[number, number]> {
+  const cached = roseAnchors.get(sheet);
+  if (cached) return cached;
+  const image = document.createElement('canvas'); image.width = image.height = 64;
+  const ctx = image.getContext('2d', { willReadFrequently: true })!;
+  const anchors = sheet.frames.map(texture => {
+    const f = texture.frame;
+    ctx.clearRect(0, 0, 64, 64); ctx.drawImage(sheet.image, f.x, f.y, f.width, f.height, 0, 0, 64, 64);
+    const pixels = ctx.getImageData(0, 0, 64, 64).data;
+    let left = 64, right = 0, bottom = 0;
+    for (let y = 0; y < 64; y++) for (let x = 0; x < 64; x++) {
+      if (pixels[(y * 64 + x) * 4 + 3] > 64) { left = Math.min(left, x); right = Math.max(right, x); bottom = Math.max(bottom, y); }
+    }
+    return [(left + right + 1) / 128, (bottom + 1) / 64] as [number, number];
+  });
+  roseAnchors.set(sheet, anchors); return anchors;
+}
 let pollenTexture: Texture | undefined;
 let rippleTexture: Texture | undefined;
 function rippleRing() {
@@ -103,7 +122,8 @@ export function createFx() {
   let ripples: Ripple[] = [];
   let watcher: Sprite | undefined;
   let oakRose: Sprite | undefined;
-  let oakRoseTexture: Texture | undefined;
+  let oakAnchors: Array<[number, number]> = [];
+  let staticRoseCount = 0;
   let oakCoverTexture: Texture | undefined;
   let settings: FxConfig | undefined;
   let roseFrames: Texture[] = [];
@@ -115,16 +135,15 @@ export function createFx() {
   let error = '';
   let patchTexture: Texture | undefined;
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
-  const stats = { ready: false, level: '', foliage: 0, waterAreas: 0, roseFrame: -1, waterFrame: -1, oakRoseScale: 1, reducedMotion: false, pollen: 0, ripples: 0, wind: 0, waterOffset: 0, error: '' };
+  const stats = { ready: false, level: '', foliage: 0, waterAreas: 0, roseFrame: -1, waterFrame: -1, oakRoseScale: 1, staticRoses: 0, reducedMotion: false, pollen: 0, ripples: 0, wind: 0, waterOffset: 0, error: '' };
 
   function clear() {
     // Containers own sprites and masks; atlas sources are shared and cached for the next round.
     for (const child of ground.removeChildren()) child.destroy({ children: true });
     for (const child of foreground.removeChildren()) child.destroy({ children: true });
     patchTexture?.destroy(true); patchTexture = undefined;
-    oakRoseTexture?.destroy(true); oakRoseTexture = undefined;
     oakCoverTexture?.destroy(true); oakCoverTexture = undefined;
-    oakRose = undefined;
+    oakRose = undefined; oakAnchors = []; staticRoseCount = 0;
     plants = []; pollen = []; water = []; ripples = []; watcher = undefined; roseFrames = [];
     ready = false; error = ''; lastWaterFrame = -1; lastRoseFrame = -1; pose = 0;
   }
@@ -134,7 +153,7 @@ export function createFx() {
     const [foliage, waterSheet, roseSheet] = await Promise.all([
       foliagePromise ??= foliageAtlas(cfg.foliage),
       waterPromise ??= sheet('water_ripple_sheet.png', cfg.water.frame_size, cfg.water.frames, 4),
-      current.id === 'rlgl' ? rosePromise ??= sheet('watcher_rose_sheet.png', cfg.rose.frame_size, cfg.rose.frames, 4) : Promise.resolve(undefined),
+      (current.id === 'rlgl' || current.id === 'oak') ? rosePromise ??= sheet('watcher_rose_sheet.png', cfg.rose.frame_size, cfg.rose.frames, 4) : Promise.resolve(undefined),
     ]);
     if (token !== generation) return; // A slow load must never place an old arena over a new one.
     settings = cfg;
@@ -185,9 +204,10 @@ export function createFx() {
       }
     }
 
-    if (current.id === 'oak') {
-      // Isolate the oak rose from its own background so its camera angle and lighting match.
-      // This small color mask is prepared once on entry; animation only changes GPU transforms.
+    if (current.id === 'oak' && roseSheet) {
+      roseFrames = roseSheet.frames;
+      // Use the baked flower only to build a stationary cover. Animated pixels come
+      // exclusively from the transparent FX sheet, so grass can never move with the rose.
       const x = 742, y = 516, width = 216, height = 162;
       const flower = document.createElement('canvas'); flower.width = width; flower.height = height;
       const ctx = flower.getContext('2d')!;
@@ -195,8 +215,25 @@ export function createFx() {
       const pixels = ctx.getImageData(0, 0, width, height);
       for (let i = 0; i < pixels.data.length; i += 4) {
         const r = pixels.data[i], g = pixels.data[i + 1], b = pixels.data[i + 2];
-        pixels.data[i + 3] = Math.round(255 * Math.max(0, Math.min(1, (r - Math.max(g * 1.18, b * 1.1) - 8) / 20)));
+        pixels.data[i + 3] = Math.round(255 * Math.max(0, Math.min(1, (r - Math.max(g, b) - 2) / 8)));
       }
+      // Pale petal highlights belong to the flower too: fill enclosed gaps in the color mask.
+      const outside = new Uint8Array(width * height);
+      const queue = new Int32Array(width * height);
+      let head = 0, tail = 0;
+      const visit = (index: number) => {
+        if (!outside[index] && pixels.data[index * 4 + 3] < 128) { outside[index] = 1; queue[tail++] = index; }
+      };
+      for (let x = 0; x < width; x++) { visit(x); visit((height - 1) * width + x); }
+      for (let y = 0; y < height; y++) { visit(y * width); visit(y * width + width - 1); }
+      while (head < tail) {
+        const index = queue[head++], px = index % width, py = Math.floor(index / width);
+        if (px > 0) visit(index - 1);
+        if (px < width - 1) visit(index + 1);
+        if (py > 0) visit(index - width);
+        if (py < height - 1) visit(index + width);
+      }
+      for (let i = 0; i < outside.length; i++) if (!outside[i]) pixels.data[i * 4 + 3] = 255;
       ctx.putImageData(pixels, 0, 0);
       const coverImage = document.createElement('canvas'); coverImage.width = width; coverImage.height = height;
       const coverCtx = coverImage.getContext('2d')!;
@@ -204,12 +241,26 @@ export function createFx() {
       coverCtx.globalCompositeOperation = 'destination-in'; coverCtx.drawImage(flower, 0, 0);
       oakCoverTexture = Texture.from(coverImage);
       const cover = new Sprite(oakCoverTexture); cover.position.set(x, y); ground.addChild(cover);
-      oakRoseTexture = Texture.from(flower);
-      oakRose = new Sprite(oakRoseTexture); oakRose.anchor.set(0.5, 0.78);
-      oakRose.position.set(x + width * 0.5, y + height * 0.78); foreground.addChild(oakRose);
+      oakAnchors = petalAnchors(roseSheet);
+      const openFrame = roseFrames.length - 1;
+      const plantRose = (x: number, y: number, scale: number) => {
+        // A leafy base and a petal-bottom anchor keep the flower rooted in the meadow.
+        const leaves = new Sprite(foliage[1]); leaves.anchor.set(...cfg.foliage.anchor);
+        leaves.position.set(x, y + 8); leaves.scale.set(scale * 1.5); leaves.tint = 0xc5c99b;
+        const rose = new Sprite(roseFrames[openFrame]); rose.anchor.set(...oakAnchors[openFrame]);
+        rose.position.set(x, y); rose.scale.set(scale);
+        ground.addChild(leaves, rose);
+        return rose;
+      };
+      // Keep one by the bank; scatter a smaller companion beside the far meadow.
+      plantRose(850, 660, 0.34);
+      plantRose(1410, 870, 0.25);
+      staticRoseCount = 2;
+      // The animated flower has open grass around it and uses the sheet's natural proportions.
+      oakRose = plantRose(1060, 920, 0.32);
     }
 
-    if (roseSheet) {
+    if (current.id === 'rlgl' && roseSheet) {
       roseFrames = roseSheet.frames;
       const size = cfg.rose.frame_size, [cx, cy] = cfg.rose.centre_px_in_rlgl_bg;
       // The exported background has the open head baked in. A one-time ground patch,
@@ -284,10 +335,10 @@ export function createFx() {
           particle.sprite.alpha = (0.25 + (Math.sin(time * 0.8 + particle.phase) + 1) * 0.16);
         }
         if (oakRose) {
-          const bloom = quiet ? 0 : Math.sin(time * 1.15);
-          oakRose.scale.set(1 + bloom * 0.045, 1 + bloom * 0.09);
-          oakRose.rotation = quiet ? 0 : Math.sin(time * 0.8) * 0.045;
-          oakRose.skew.x = quiet ? 0 : Math.sin(time * 0.8 + 0.5) * 0.035;
+          const frame = quiet ? roseFrames.length - 1 : idleRoseFrame(time, roseFrames.length);
+          if (frame !== lastRoseFrame) {
+            oakRose.texture = roseFrames[frame]; oakRose.anchor.set(...oakAnchors[frame]); lastRoseFrame = frame;
+          }
         }
         if (watcher) {
           pose = rosePose(pose, phase === 'minigame' && signal === 'green', dt, quiet);
@@ -295,7 +346,7 @@ export function createFx() {
           if (frame !== lastRoseFrame) { watcher.texture = roseFrames[frame]; lastRoseFrame = frame; }
         }
       }
-      Object.assign(stats, { ready, level: current.id, foliage: plants.length, waterAreas: water.length, roseFrame: lastRoseFrame, waterFrame: lastWaterFrame, reducedMotion: quiet, oakRoseScale: oakRose?.scale.y ?? 1,
+      Object.assign(stats, { ready, level: current.id, foliage: plants.length, waterAreas: water.length, roseFrame: lastRoseFrame, waterFrame: lastWaterFrame, reducedMotion: quiet, oakRoseScale: oakRose?.scale.x ?? 1, staticRoses: staticRoseCount,
         ripples: quiet ? 0 : ripples.length,
         pollen: quiet ? 0 : Math.min(pollen.length, innerWidth < 700 ? 12 : 24),
         wind: plants[0]?.sprite.skew.x ?? 0, waterOffset: water[0]?.tilePosition.x ?? 0, error });

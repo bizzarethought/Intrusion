@@ -22,3 +22,13 @@ export function insidePolygon(x: number, y: number, points: readonly number[]): 
   }
   return inside;
 }
+
+/** Idle flower: hold closed, open for a second, rest open, then close for a second. */
+export function idleRoseFrame(time: number, count: number): number {
+  const phase = Math.max(0, time) % 8;
+  const last = Math.max(0, count - 1);
+  if (phase < 1 || phase >= 7) return 0;
+  if (phase < 2) return Math.round((phase - 1) * last);
+  if (phase < 6) return last;
+  return Math.round((7 - phase) * last);
+}
