@@ -1,6 +1,6 @@
-import { Container, Graphics, Rectangle, Sprite, Texture, TilingSprite } from 'pixi.js';
-import type { Level, LevelId } from './levels';
-import { insidePolygon, pingPongFrame, rosePose, idleRoseFrame } from './fxMath';
+import { Container, Rectangle, Sprite, Texture, TilingSprite } from 'pixi.js';
+import { COLLISION_HEIGHT as ROWS, COLLISION_WIDTH as COLUMNS, type Level } from './levels';
+import { pingPongFrame, rosePose, idleRoseFrame } from './fxMath';
 
 const ROOT = '/assets/fx/';
 const MAX_FOLIAGE = 96;
@@ -9,12 +9,43 @@ type FxConfig = {
   water: { frames: number; frame_size: number; fps: number; pixels_per_meter: number };
   foliage: { files: string[]; frame_size: number; draw_scale_to_match_level: number; anchor: [number, number] };
 };
-// Inset from the banks: reflections, flowers and rocks in the source image stay intact.
-const WATER: Partial<Record<LevelId, number[][]>> = {
-  oak: [[1410, 45, 1660, 45, 1680, 80, 1580, 130, 1610, 240, 1720, 260, 1850, 230, 1870, 385, 1770, 435, 1620, 480, 1500, 570, 1370, 620, 1220, 615, 1250, 545, 1290, 505, 1240, 465, 1320, 360, 1370, 260, 1390, 160]],
-  rlgl: [[1220, 35, 1390, 35, 1370, 75, 1450, 115, 1500, 110, 1490, 155, 1460, 190, 1490, 225, 1400, 275, 1320, 305, 1270, 380, 1210, 400, 1150, 350, 1090, 300, 1110, 250, 1160, 190, 1180, 115],
-    [1200, 1030, 1390, 985, 1580, 985, 1770, 1005, 1890, 1040, 1890, 1080, 1000, 1080]],
-};
+
+/**
+ * Reads the level's own picture, one sample per cell of its collision map, to find
+ * the water (blue, and nowhere to stand) and the open grass (green, and somewhere to stand).
+ * The water comes back as a soft-edged mask too, so the moving surface meets the banks
+ * exactly, with no outline of its own.
+ */
+function survey(level: Level) {
+  const size = COLUMNS * ROWS;
+  const wet = new Uint8Array(size), green = new Uint8Array(size);
+  const hard = document.createElement('canvas'); hard.width = COLUMNS; hard.height = ROWS;
+  const ctx = hard.getContext('2d', { willReadFrequently: true })!;
+  ctx.drawImage(level.image, 0, 0, COLUMNS, ROWS);
+  const pixels = ctx.getImageData(0, 0, COLUMNS, ROWS);
+  const box = { left: COLUMNS, top: ROWS, right: 0, bottom: 0 };
+  for (let i = 0; i < size; i++) {
+    const r = pixels.data[i * 4], g = pixels.data[i * 4 + 1], b = pixels.data[i * 4 + 2];
+    const ground = level.collision?.[i] === 1;
+    wet[i] = Number(level.collision !== null && !ground && b > r + 25 && g > r + 10);
+    green[i] = Number(ground && g > r && g > b + 10);
+    pixels.data.fill(255, i * 4, i * 4 + 3); pixels.data[i * 4 + 3] = wet[i] * 255;
+    if (wet[i]) {
+      const x = i % COLUMNS, y = Math.floor(i / COLUMNS);
+      box.left = Math.min(box.left, x); box.right = Math.max(box.right, x + 1);
+      box.top = Math.min(box.top, y); box.bottom = Math.max(box.bottom, y + 1);
+    }
+  }
+  ctx.putImageData(pixels, 0, 0);
+  const mask = document.createElement('canvas'); mask.width = COLUMNS; mask.height = ROWS;
+  const soft = mask.getContext('2d')!;
+  soft.filter = 'blur(1.5px)'; // where a browser has no canvas filter the edge is just crisper
+  soft.drawImage(hard, 0, 0);
+  /** True where every one of the points (level pixels) lands on a marked cell. */
+  const all = (cells: Uint8Array, points: number[][]) => points.every(([x, y]) =>
+    x >= 0 && y >= 0 && x < COLUMNS * 4 && y < ROWS * 4 && cells[Math.floor(y / 4) * COLUMNS + Math.floor(x / 4)] === 1);
+  return { wet, green, mask, box, all };
+}
 
 type Sheet = { image: HTMLCanvasElement; frames: Texture[] };
 let configPromise: Promise<FxConfig> | undefined;
@@ -75,8 +106,12 @@ function config() {
     return response.json() as Promise<FxConfig>;
   });
 }
-/** Repack long strips into compact atlases below mobile WebGL texture limits. */
-async function sheet(name: string, size: number, count: number, columns: number): Promise<Sheet> {
+/**
+ * Repack long strips into compact atlases below mobile WebGL texture limits.
+ * `mirrored` packs each frame as a 2x2 block of itself flipped, at half size, so the
+ * frame can repeat across a pond with no visible seam (the water loop is not tileable).
+ */
+async function sheet(name: string, size: number, count: number, columns: number, mirrored = false): Promise<Sheet> {
   const bitmap = await imageFile(name);
   if (bitmap.width !== count * size || bitmap.height !== size) {
     bitmap.close(); throw new Error(`Unexpected FX sheet layout: ${name}`);
@@ -84,7 +119,15 @@ async function sheet(name: string, size: number, count: number, columns: number)
   const image = document.createElement('canvas');
   image.width = columns * size; image.height = Math.ceil(count / columns) * size;
   const ctx = image.getContext('2d')!;
-  for (let i = 0; i < count; i++) ctx.drawImage(bitmap, i * size, 0, size, size, (i % columns) * size, Math.floor(i / columns) * size, size, size);
+  for (let i = 0; i < count; i++) {
+    const x = (i % columns) * size, y = Math.floor(i / columns) * size;
+    if (!mirrored) { ctx.drawImage(bitmap, i * size, 0, size, size, x, y, size, size); continue; }
+    for (const [flipX, flipY] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
+      ctx.setTransform(flipX ? -1 : 1, 0, 0, flipY ? -1 : 1, x + flipX * size, y + flipY * size);
+      ctx.drawImage(bitmap, i * size, 0, size, size, 0, 0, size / 2, size / 2);
+    }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
   bitmap.close();
   const source = Texture.from(image).source;
   return { image, frames: Array.from({ length: count }, (_, i) => new Texture({ source, frame: new Rectangle((i % columns) * size, Math.floor(i / columns) * size, size, size) })) };
@@ -100,11 +143,12 @@ async function foliageAtlas(settings: FxConfig['foliage']) {
   return images.map((_, i) => new Texture({ source, frame: new Rectangle((i % 2) * size, Math.floor(i / 2) * size, size, size) }));
 }
 
-function grassy(level: LevelId, x: number, y: number) {
-  if (WATER[level]?.some(polygon => insidePolygon(x, y, polygon))) return false;
-  if (level === 'oak') return y > 760 || (x < 330 && y > 130) || (x > 780 && x < 1030 && y > 180 && y < 430);
-  if (level === 'rlgl') return (y > 720 && y < 880) || (x > 100 && x < 900 && y > 180 && y < 450);
-  return false; // Add placements when the other arenas are enabled.
+/** Where a tuft may be planted: open grass with grass around it, away from where the art is already busy. */
+function grassy(level: Level, land: ReturnType<typeof survey>, x: number, y: number) {
+  if (!land.all(land.green, [[x, y], [x - 36, y], [x + 36, y], [x, y - 20], [x, y + 20]])) return false;
+  if (level.id === 'oak') return y > 760 || (x < 330 && y > 130) || (x > 780 && x < 1030 && y > 180 && y < 430);
+  if (level.id === 'rlgl') return !(x > 100 && x < 1560 && y > 440 && y < 840); // keep the course clear
+  return true;
 }
 
 type Plant = { sprite: Sprite; phase: number; strength: number };
@@ -133,7 +177,7 @@ export function createFx() {
   let lastRoseFrame = -1;
   let ready = false;
   let error = '';
-  let patchTexture: Texture | undefined;
+  let maskTexture: Texture | undefined;
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
   const stats = { ready: false, level: '', foliage: 0, waterAreas: 0, roseFrame: -1, waterFrame: -1, oakRoseScale: 1, staticRoses: 0, reducedMotion: false, pollen: 0, ripples: 0, wind: 0, waterOffset: 0, error: '' };
 
@@ -141,7 +185,7 @@ export function createFx() {
     // Containers own sprites and masks; atlas sources are shared and cached for the next round.
     for (const child of ground.removeChildren()) child.destroy({ children: true });
     for (const child of foreground.removeChildren()) child.destroy({ children: true });
-    patchTexture?.destroy(true); patchTexture = undefined;
+    maskTexture?.destroy(true); maskTexture = undefined;
     oakCoverTexture?.destroy(true); oakCoverTexture = undefined;
     oakRose = undefined; oakAnchors = []; staticRoseCount = 0;
     plants = []; pollen = []; water = []; ripples = []; watcher = undefined; roseFrames = [];
@@ -152,30 +196,31 @@ export function createFx() {
     const cfg = await config();
     const [foliage, waterSheet, roseSheet] = await Promise.all([
       foliagePromise ??= foliageAtlas(cfg.foliage),
-      waterPromise ??= sheet('water_ripple_sheet.png', cfg.water.frame_size, cfg.water.frames, 4),
+      waterPromise ??= sheet('water_ripple_sheet.png', cfg.water.frame_size, cfg.water.frames, 4, true),
       (current.id === 'rlgl' || current.id === 'oak') ? rosePromise ??= sheet('watcher_rose_sheet.png', cfg.rose.frame_size, cfg.rose.frames, 4) : Promise.resolve(undefined),
     ]);
     if (token !== generation) return; // A slow load must never place an old arena over a new one.
     settings = cfg;
     waterFrames = waterSheet.frames;
-    for (const polygon of WATER[current.id] ?? []) {
-      const xs = polygon.filter((_, i) => i % 2 === 0), ys = polygon.filter((_, i) => i % 2 === 1);
-      const x = Math.min(...xs), y = Math.min(...ys);
+    const land = survey(current);
+    if (land.box.right > land.box.left) {
+      // The water loop moves over every pond in the picture, cut to the water's own outline.
+      const x = land.box.left * 4, y = land.box.top * 4;
       const group = new Container();
-      const mask = new Graphics().poly(polygon).fill(0xffffff);
-      const surface = new TilingSprite({ texture: waterSheet.frames[0], width: Math.max(...xs) - x, height: Math.max(...ys) - y });
+      const surface = new TilingSprite({ texture: waterSheet.frames[0], width: land.box.right * 4 - x, height: land.box.bottom * 4 - y });
       surface.position.set(x, y); surface.alpha = 0.28;
-      const scale = current.pixelsPerMeter / cfg.water.pixels_per_meter;
+      const scale = (current.pixelsPerMeter / cfg.water.pixels_per_meter) * 2; // each tile holds the frame twice across, at half size
       surface.tileScale.set(scale, scale);
-      group.addChild(surface, mask); surface.mask = mask;
+      maskTexture = Texture.from(land.mask);
+      const outline = new Sprite(maskTexture); outline.width = COLUMNS * 4; outline.height = ROWS * 4;
+      group.addChild(surface, outline); surface.mask = outline;
       ground.addChild(group); water.push(surface);
       // A handful of expanding rings makes the broad, low-contrast water animation legible.
       let placed = 0;
-      for (let attempt = 0; placed < 6 && attempt < 200; attempt++) {
+      for (let attempt = 0; placed < 6 && attempt < 400; attempt++) {
         const rx = x + ((attempt * 0.618033 + 0.2) % 1) * surface.width;
         const ry = y + ((attempt * 0.414214 + 0.35) % 1) * surface.height;
-        const inset = [[-65, 0], [65, 0], [0, -32], [0, 32], [-45, -23], [45, 23]];
-        if (!inset.every(([dx, dy]) => insidePolygon(rx + dx, ry + dy, polygon))) continue;
+        if (!land.all(land.wet, [[-65, 0], [65, 0], [0, -32], [0, 32], [-45, -23], [45, 23]].map(([dx, dy]) => [rx + dx, ry + dy]))) continue;
         const sprite = new Sprite(rippleRing()); sprite.anchor.set(0.5); sprite.position.set(rx, ry);
         group.addChild(sprite); ripples.push({ sprite, phase: placed / 6 }); placed++;
       }
@@ -185,7 +230,7 @@ export function createFx() {
     const limit = innerWidth < 700 ? 48 : MAX_FOLIAGE;
     for (let attempt = 0; plants.length < limit && attempt < 3000; attempt++) {
       const x = 60 + random() * 1800, y = 140 + random() * 820;
-      if (!grassy(current.id, x, y) || plants.some(plant => Math.hypot(plant.sprite.x - x, plant.sprite.y - y) < 65)) continue;
+      if (!grassy(current, land, x, y) || plants.some(plant => Math.hypot(plant.sprite.x - x, plant.sprite.y - y) < 65)) continue;
       const sprite = new Sprite(foliage[Math.floor(random() * foliage.length)]);
       const scale = cfg.foliage.draw_scale_to_match_level * (0.75 + random() * 0.4);
       sprite.anchor.set(...cfg.foliage.anchor); sprite.position.set(x, y); sprite.scale.set(scale); sprite.tint = 0xdecfb5;
@@ -262,18 +307,8 @@ export function createFx() {
 
     if (current.id === 'rlgl' && roseSheet) {
       roseFrames = roseSheet.frames;
-      const size = cfg.rose.frame_size, [cx, cy] = cfg.rose.centre_px_in_rlgl_bg;
-      // The exported background has the open head baked in. A one-time ground patch,
-      // clipped by that head's alpha, keeps it from showing through closed petals.
-      const patch = document.createElement('canvas'); patch.width = size; patch.height = size;
-      const ctx = patch.getContext('2d')!;
-      ctx.drawImage(current.image, 700, 350, size, size, 0, 0, size, size);
-      ctx.globalCompositeOperation = 'destination-in';
-      const frame = roseFrames[roseFrames.length - 1].frame;
-      ctx.drawImage(roseSheet.image, frame.x, frame.y, size, size, 0, 0, size, size);
-      patchTexture = Texture.from(patch);
-      const cover = new Sprite(patchTexture); cover.anchor.set(0.5); cover.position.set(cx, cy); cover.scale.set(cfg.rose.draw_scale);
-      ground.addChild(cover);
+      // The level's own file says where the watching rose stands; the picture no longer has one baked in.
+      const [cx, cy] = current.watcher ? [current.watcher.x, current.watcher.y] : cfg.rose.centre_px_in_rlgl_bg;
       watcher = new Sprite(roseFrames[0]); watcher.anchor.set(0.5); watcher.position.set(cx, cy); watcher.scale.set(cfg.rose.draw_scale);
       foreground.addChild(watcher);
     }

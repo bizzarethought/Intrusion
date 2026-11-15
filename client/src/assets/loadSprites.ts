@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { removeShadow } from '../game/sprites';
 import { SPRITE_DIR } from './manifest';
 
 // Loads sprite atlases (TexturePacker "JSON Hash") on demand and caches them.
@@ -48,8 +49,11 @@ async function load(id: string): Promise<Atlas | null> {
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
-  canvas.getContext('2d')!.drawImage(small, 0, 0);
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+  ctx.drawImage(small, 0, 0);
   small.close();
+  removeShadow(ctx); // the portraits match the robots in the level
+
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve));
   if (!blob) return null;
   const frames: Atlas['frames'] = {};

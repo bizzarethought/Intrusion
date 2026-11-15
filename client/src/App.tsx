@@ -15,16 +15,16 @@ import { LobbyScreen } from './screens/LobbyScreen';
 export function App({ game: view }: { game: Game }) {
   const game = useGameRoom();
   const [screen, setScreen] = useState<'landing' | 'join'>('landing');
-  const [introSkipped, setIntroSkipped] = useState(false);
-  const skipIntro = useCallback(() => setIntroSkipped(true), []);
+  const [introFailed, setIntroFailed] = useState(false);
+  const failIntro = useCallback(() => setIntroFailed(true), []);
   const connected = game.status === 'connected';
   const inLobby = game.phase === 'lobby';
-  // The server holds everyone in a loading phase while the video plays (skipped for reduced motion).
-  const watchingIntro = connected && game.phase === 'loading' && !introSkipped && !prefersReducedMotion();
+  // The server holds everyone in a loading phase while the video plays (not shown for reduced motion, or if it cannot play).
+  const watchingIntro = connected && game.phase === 'loading' && !introFailed && !prefersReducedMotion();
 
   useEffect(() => {
     view.setScene(!connected ? 'attract' : inLobby ? 'lobby' : 'play');
-    if (!connected || inLobby) setIntroSkipped(false);
+    if (!connected || inLobby) setIntroFailed(false);
   }, [view, connected, inLobby]);
 
   useEffect(() => {
@@ -52,7 +52,7 @@ export function App({ game: view }: { game: Game }) {
     );
   }
   if (connected && inLobby) return <LobbyScreen game={game} />;
-  if (watchingIntro) return <IntroVideo onDone={skipIntro} />;
+  if (watchingIntro) return <IntroVideo endsAt={game.phaseEndsAt} onFail={failIntro} />;
   if (connected) return <GameScreen game={game} />;
   return screen === 'landing'
     ? <LandingScreen onPlay={() => setScreen('join')} />

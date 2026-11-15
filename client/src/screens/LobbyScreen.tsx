@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { play } from '../audio';
+import { INTRO_VIDEO } from '../components/IntroVideo';
 import { SoundToggle } from '../components/SettingsPanel';
 import { leave, send } from '../protocol/roomClient';
 import { MIN_HUMANS, type Snapshot } from '../protocol/types';
@@ -19,6 +20,8 @@ export function LobbyScreen({ game }: { game: Snapshot }) {
 
   return (
     <div className="screen lobby">
+      {/* Fetched while everyone waits, so the loading video is ready the moment the match starts. */}
+      <video src={INTRO_VIDEO} preload="auto" muted hidden />
       <div className="corner ui"><SoundToggle /><button className="button button--small" onClick={leave}>Leave</button></div>
       <section className="panel lobby__card ui" aria-label="Lobby">
         <span className="kicker">Room code</span>

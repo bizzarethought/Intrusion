@@ -79,5 +79,100 @@
    ],
    "facing_deg": 0
   }
- ]
+ ],
+ "occluders": [
+  {
+   "box_px": [
+    144,
+    40,
+    380,
+    333
+   ],
+   "base_y_px": 312,
+   "footprint_m": [
+    -1.5,
+    2.6,
+    0.34
+   ]
+  },
+  {
+   "box_px": [
+    -17,
+    489,
+    75,
+    603
+   ],
+   "base_y_px": 594,
+   "footprint_m": [
+    -2.3,
+    1.3,
+    0.13
+   ]
+  },
+  {
+   "box_px": [
+    397,
+    73,
+    476,
+    171
+   ],
+   "base_y_px": 164,
+   "footprint_m": [
+    -0.9,
+    3.3,
+    0.11
+   ]
+  },
+  {
+   "box_px": [
+    1654,
+    137,
+    2012,
+    468
+   ],
+   "base_y_px": 453,
+   "footprint_m": [
+    3.9,
+    2.6,
+    0.52
+   ]
+  },
+  {
+   "box_px": [
+    1650,
+    504,
+    1841,
+    668
+   ],
+   "base_y_px": 667,
+   "footprint_m": [
+    3.6,
+    1.2,
+    0.28
+   ]
+  },
+  {
+   "box_px": [
+    1844,
+    188,
+    1938,
+    277
+   ],
+   "base_y_px": 274,
+   "footprint_m": [
+    4.1,
+    3.4,
+    0.13
+   ]
+  }
+ ],
+ "collision": {
+  "image": "side_collision.png",
+  "size": [
+   480,
+   270
+  ],
+  "white": "walkable"
+ },
+ "foreground": "side_fg.png"
 }

@@ -29,6 +29,8 @@ export class GameState extends Schema {
   @type("number") round = 0;
   @type("string") miniGame = "";
   @type("number") phaseEndsAt = 0;
+  /** The server's own time when the phase began, so clients can count down on its clock, not theirs. */
+  @type("number") clock = 0;
   /** Vote-outs left in the match. The AI wins if it survives them all. */
   @type("number") votesRemaining = 0;
   /** Red Light, Green Light: "green", "red", or "" when no light is showing. */

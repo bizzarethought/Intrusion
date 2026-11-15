@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { BRIDGE, BRIDGE_MISSING, bridgeCell, bridgePattern, podiumResults, sideOf, sidePoints } from "./minigames.js";
+import { BRIDGE, SIDES, bridgeCell, bridgePattern, podiumResults, sideOf, sidePoints } from "./minigames.js";
 
 test("bridge: banks are not panels, and the middle of each panel maps to its column and row", () => {
   assert.equal(bridgeCell(BRIDGE.startX - 0.01, 0), null);
@@ -17,21 +17,16 @@ test("bridge: cutting the corner between two safe panels touches neither wrong o
   }
 });
 
-test("bridge: the safe path never uses a panel the art shows missing", () => {
-  for (let i = 0; i < 50; i++) {
-    const pattern = bridgePattern();
-    assert.equal(pattern.length, BRIDGE.columns);
-    for (const key of BRIDGE_MISSING) {
-      const [col, row] = key.split(":");
-      assert.notEqual(pattern[Number(col)], row);
-    }
-  }
+test("bridge: the safe path names one row for each column", () => {
+  for (let i = 0; i < 20; i++) assert.match(bridgePattern(), new RegExp(`^[01]{${BRIDGE.columns}}$`));
 });
 
 test("sides: the bigger crowd scores most, ties pay both, the stones pay nothing", () => {
-  assert.equal(sideOf(-2), "A");
-  assert.equal(sideOf(3), "B");
-  assert.equal(sideOf(0.5), "");
+  assert.equal(sideOf(-2, 0), "A");
+  assert.equal(sideOf(3, 0), "B");
+  assert.equal(sideOf(0.5, -0.28), ""); // on the middle stone
+  assert.equal(sideOf(-0.5, -1.2), "A"); // grass beside the pond, level with the first stones, is still the left bank
+  for (const x of SIDES.startStones) assert.equal(sideOf(x, SIDES.laneZ), ""); // nobody starts with a side
   assert.equal(sidePoints("A", 3, 1), 60);
   assert.equal(sidePoints("B", 3, 1), 20);
   assert.equal(sidePoints("A", 2, 2), 40);

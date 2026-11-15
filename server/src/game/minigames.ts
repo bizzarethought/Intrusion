@@ -72,7 +72,7 @@ const RED_GRACE_MS = 400; // reaction time allowed after the light turns red
 
 /** Run from the left roses to the right ones. Move while the rose watches and you go back. */
 class RedLightGreenLight implements MiniGame {
-  readonly readyMs = 4_000;
+  readonly readyMs = 5_000; // the rules, then a three-second count-in
   readonly durationMs = 60_000;
   private signalSince = 0;
   private flipAt = Infinity;
@@ -148,9 +148,6 @@ export const BRIDGE = {
   minX: -3.2,
   maxX: 3.2,
 };
-/** Panels the level art shows already gone, as "column:row". */
-export const BRIDGE_MISSING = ["2:0", "3:1", "5:0"];
-
 /** True between the two banks, where the only footing is the bridge. */
 const overWater = (x: number) => x >= BRIDGE.startX && x < BRIDGE.finishX;
 
@@ -169,15 +166,9 @@ export function bridgeCell(x: number, z: number): { col: number; row: number } |
   return offX < BRIDGE.columnWidth * 0.36 && offZ < 0.19 ? { col, row } : null;
 }
 
-/** A safe row (0 or 1) for each column, as a string. Columns with a missing panel have no choice. */
+/** A safe row (0 or 1) for each column, as a string. */
 export function bridgePattern(random: () => number = Math.random): string {
-  let pattern = "";
-  for (let col = 0; col < BRIDGE.columns; col++) {
-    if (BRIDGE_MISSING.includes(`${col}:0`)) pattern += "1";
-    else if (BRIDGE_MISSING.includes(`${col}:1`)) pattern += "0";
-    else pattern += random() < 0.5 ? "0" : "1";
-  }
-  return pattern;
+  return Array.from({ length: BRIDGE.columns }, () => (random() < 0.5 ? "0" : "1")).join("");
 }
 
 /** The safe panels flash once; then everyone crosses from memory. A wrong panel breaks and drops you back at the start. */
@@ -185,7 +176,7 @@ class GlassBridgeMemory implements MiniGame {
   readonly readyMs = 6_000; // long enough to memorise seven panels
   readonly durationMs = 60_000;
   private pattern = "";
-  private readonly broken = new Set(BRIDGE_MISSING);
+  private readonly broken = new Set<string>();
   /** What the AI believes the safe row is for each column: mostly right, sometimes not. */
   private aiPlan: number[] = [];
   private aiColumn = 0;
@@ -200,10 +191,7 @@ class GlassBridgeMemory implements MiniGame {
 
   begin(host: Host, now: number): void {
     host.state.pattern = ""; // ...then hidden: from here it is memory
-    this.aiPlan = [...this.pattern].map((row, col) => {
-      const forced = BRIDGE_MISSING.some((key) => key.startsWith(`${col}:`));
-      return forced || Math.random() < 0.72 ? Number(row) : 1 - Number(row);
-    });
+    this.aiPlan = [...this.pattern].map((row) => (Math.random() < 0.72 ? Number(row) : 1 - Number(row)));
     this.aiWaitUntil = now + between(600, 1_800);
   }
 
@@ -263,8 +251,17 @@ class GlassBridgeMemory implements MiniGame {
 
 // ----------------------------------------------------------------- Pick a Side
 
-/** The rose bank is left of leftX, the boulder bank right of rightX; stepping stones join them. */
-export const SIDES = { leftX: -0.69, rightX: 2.2, startX: 0.5, laneZ: -0.28, minX: -3.2, maxX: 3.2, minZ: -1.6, maxZ: 2.7 };
+/**
+ * Two banks with a pond between, crossed by one row of stepping stones. The stones run from
+ * leftX to rightX in a strip between stonesTop and stonesBottom; everywhere else a player can
+ * stand is one bank or the other (the first stone on the left touches its bank and counts as it). Mirrors SIDES in client/src/game/levels.ts.
+ */
+export const SIDES = {
+  leftX: -0.74, rightX: 2.45, stonesTop: -0.56, stonesBottom: 0.03, laneZ: -0.28,
+  /** The three middle stones, where everyone starts. */
+  startStones: [-0.206, 0.498, 1.203],
+  minX: -3.2, maxX: 3.2, minZ: -1.6, maxZ: 2.7,
+};
 const SIDE_PROMPTS: Array<[question: string, roses: string, boulders: string]> = [
   ["Would you rather...", "always be ten minutes late", "always be an hour early"],
   ["Would you rather...", "fight one horse-sized duck", "fight a hundred duck-sized horses"],
@@ -278,9 +275,10 @@ const SIDE_PROMPTS: Array<[question: string, roses: string, boulders: string]> =
   ["Would you rather...", "give up your phone for a month", "give up your bed for a month"],
 ];
 
-/** Which bank a player is standing on: "A" (roses), "B" (boulders) or "" (still on the stones). */
-export function sideOf(x: number): "A" | "B" | "" {
-  return x < SIDES.leftX ? "A" : x > SIDES.rightX ? "B" : "";
+/** Which bank a player is standing on: "A" (left), "B" (right) or "" (still on the stones). */
+export function sideOf(x: number, z: number): "A" | "B" | "" {
+  const onStones = x > SIDES.leftX && x < SIDES.rightX && z > SIDES.stonesTop && z < SIDES.stonesBottom;
+  return onStones ? "" : x < 0.5 ? "A" : "B"; // the pond's middle stone is at 0.5
 }
 
 /** Points for a would-you-rather: the bigger crowd scores most; a tie pays both; staying on the stones pays nothing. */
@@ -303,10 +301,10 @@ class PickASide implements MiniGame {
     host.state.optionA = roses;
     host.state.optionB = boulders;
     host.state.stage = "choose";
-    // Everyone starts bunched on the stones in the middle.
+    // Everyone starts on the middle stones, shared out between them.
     lineup.forEach((player, i) => {
-      player.x = SIDES.startX + ((i % 3) - 1) * 0.35;
-      player.z = SIDES.laneZ + (Math.floor(i / 3) - 1) * 0.16;
+      player.x = SIDES.startStones[i % SIDES.startStones.length];
+      player.z = SIDES.laneZ;
     });
   }
 
@@ -327,9 +325,9 @@ class PickASide implements MiniGame {
   tick(host: Host, now: number): void {
     if (host.state.stage === "choose" && now >= this.decideAt) {
       const players = host.playing();
-      const a = players.filter((player) => sideOf(player.x) === "A").length;
-      const b = players.filter((player) => sideOf(player.x) === "B").length;
-      for (const player of players) player.score += sidePoints(sideOf(player.x), a, b);
+      const a = players.filter((player) => sideOf(player.x, player.z) === "A").length;
+      const b = players.filter((player) => sideOf(player.x, player.z) === "B").length;
+      for (const player of players) player.score += sidePoints(sideOf(player.x, player.z), a, b);
       host.state.board = JSON.stringify({ a, b });
       host.state.stage = "result";
       return;
@@ -340,11 +338,11 @@ class PickASide implements MiniGame {
       // A late look at where the crowd went; sometimes it follows.
       this.ai.reconsiderAt = Infinity;
       const others = host.playing().filter((player) => player !== bot);
-      const a = others.filter((player) => sideOf(player.x) === "A").length;
-      const b = others.filter((player) => sideOf(player.x) === "B").length;
+      const a = others.filter((player) => sideOf(player.x, player.z) === "A").length;
+      const b = others.filter((player) => sideOf(player.x, player.z) === "B").length;
       if (a !== b && Math.random() < 0.4) this.ai.side = a > b ? "A" : "B";
     }
-    stepToward(this, host, bot, this.ai.side === "A" ? SIDES.leftX - 0.9 : SIDES.rightX + 0.5, SIDES.laneZ, 1.3, now);
+    stepToward(this, host, bot, this.ai.side === "A" ? SIDES.leftX - 0.7 : SIDES.rightX + 0.3, SIDES.laneZ, 1.3, now);
   }
 
   message(): void {}
@@ -357,7 +355,7 @@ class PickASide implements MiniGame {
 // --------------------------------------------------------------- Prompt Podium
 
 /** The ten boulders, as pixels on the podium level (266.67 px per metre, 38 degree camera). */
-const PODIUM_SPOTS = [[208, 398], [316, 491], [462, 491], [638, 538], [833, 607], [1034, 589], [1229, 575], [1405, 498], [1551, 461], [1658, 353]]
+const PODIUM_SPOTS = [[208, 332], [316, 437], [462, 397], [638, 444], [833, 548], [1034, 524], [1229, 521], [1405, 426], [1551, 407], [1658, 271]]
   .map(([px, py]) => ({ x: (px - 960) / 266.67, z: (py - 540) / (266.67 * Math.sin((38 * Math.PI) / 180)) }));
 const PODIUM_PROMPTS = [
   "The worst thing to say on a first date",
@@ -389,7 +387,7 @@ export function podiumResults(answers: Map<string, string>, keys: Map<string, nu
 
 /** Everyone types an answer to a prompt, then votes for the funniest one that is not their own. */
 class PromptPodium implements MiniGame {
-  readonly readyMs = 4_000;
+  readonly readyMs = 5_000; // the rules, then a three-second count-in
   readonly durationMs = ANSWER_MS + VOTE_MS + RESULTS_MS;
   private stageEndsAt = 0;
   private readonly answers = new Map<string, string>();
@@ -402,7 +400,9 @@ class PromptPodium implements MiniGame {
     host.state.prompt = pick(PODIUM_PROMPTS);
     host.state.stage = "answer";
     host.state.board = "";
-    lineup.forEach((player, i) => Object.assign(player, PODIUM_SPOTS[i % PODIUM_SPOTS.length]));
+    // Spread along the row, so a small group stands on boulders well apart, one each.
+    const step = (PODIUM_SPOTS.length - 1) / Math.max(1, lineup.length - 1);
+    lineup.forEach((player, i) => Object.assign(player, PODIUM_SPOTS[Math.min(PODIUM_SPOTS.length - 1, Math.round(i * step))]));
   }
 
   begin(host: Host, now: number): void {

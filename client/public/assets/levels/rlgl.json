@@ -11,73 +11,134 @@
  "spawn_points": [
   {
    "px": [
-    447.6,
-    796.8
+    566.6,
+    790.6
    ],
-   "facing_deg": 3
+   "facing_deg": 1
   },
   {
    "px": [
-    1335.8,
-    680.7
+    450.1,
+    762.6
    ],
-   "facing_deg": 11
+   "facing_deg": -7
   },
   {
    "px": [
-    661.1,
-    721.2
+    650.0,
+    714.7
    ],
    "facing_deg": -8
   },
   {
    "px": [
-    633.8,
-    689.7
+    627.0,
+    683.4
    ],
    "facing_deg": 8
   },
   {
    "px": [
-    943.0,
-    638.8
+    889.0,
+    636.9
    ],
    "facing_deg": -10
   },
   {
    "px": [
-    1167.6,
-    592.7
+    1069.5,
+    593.4
    ],
    "facing_deg": -4
   },
   {
    "px": [
-    837.7,
-    579.1
+    791.8,
+    578.2
    ],
    "facing_deg": -6
   },
   {
    "px": [
-    1273.6,
-    529.0
+    1154.4,
+    531.8
    ],
    "facing_deg": -2
   },
   {
    "px": [
-    696.0,
-    509.4
+    683.0,
+    511.1
    ],
    "facing_deg": -12
   },
   {
    "px": [
-    1065.4,
-    485.4
+    988.2,
+    485.3
    ],
    "facing_deg": 11
   }
- ]
+ ],
+ "watcher_rose": {
+  "centre_px": [
+   1699.5,
+   451.1
+  ],
+  "sheet": "fx/watcher_rose_sheet.png",
+  "draw_scale": 1.0
+ },
+ "occluders": [
+  {
+   "box_px": [
+    1630,
+    272,
+    1769,
+    435
+   ],
+   "base_y_px": 413,
+   "footprint_m": [
+    3.3,
+    0.2,
+    0.22
+   ]
+  },
+  {
+   "box_px": [
+    1656,
+    650,
+    1795,
+    785
+   ],
+   "base_y_px": 774,
+   "footprint_m": [
+    3.4,
+    -2.7,
+    0.23
+   ]
+  },
+  {
+   "box_px": [
+    524,
+    254,
+    644,
+    409
+   ],
+   "base_y_px": 377,
+   "footprint_m": [
+    -1.0,
+    0.6,
+    0.19
+   ]
+  }
+ ],
+ "collision": {
+  "image": "rlgl_collision.png",
+  "size": [
+   480,
+   270
+  ],
+  "white": "walkable"
+ },
+ "foreground": "rlgl_fg.png"
 }

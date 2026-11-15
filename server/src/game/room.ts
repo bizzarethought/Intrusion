@@ -171,6 +171,8 @@ export class FindTheBotRoom extends Room<GameState> {
     if (phase !== "voting") this.conversation.stop();
     this.state.phase = phase;
     this.state.phaseEndsAt = Date.now() + durationMs;
+    // Laptop clocks disagree by seconds; this lets every client count down to the server's time.
+    this.state.clock = Date.now();
     clearTimeout(this.phaseTimer);
     this.phaseTimer = setTimeout(() => this.advancePhase(), durationMs);
   }

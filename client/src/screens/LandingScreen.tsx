@@ -14,9 +14,6 @@ export function LandingScreen({ onPlay }: { onPlay: () => void }) {
         <button className="button button--primary button--big" onClick={() => { play('click'); onPlay(); }}>Play</button>
         <button className="button button--big" onClick={() => { play('click'); setShowHelp(true); }}>How to play</button>
       </div>
-      <footer className="credits">
-A party game of nature against machine, made at Emory Hacks 2026. Every robot and every meadow was modelled and rendered in Blender by the team.
-      </footer>
       {showHelp && <HowToPlay onClose={() => setShowHelp(false)} />}
     </div>
   );

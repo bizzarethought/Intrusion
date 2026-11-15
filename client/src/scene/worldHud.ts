@@ -13,14 +13,16 @@ export type WorldHud = {
   /** Short personal feedback, e.g. "Caught moving!" or "+72 points". */
   result: string;
   scored: boolean;
+  /** Pick a Side: the bank the local player is standing on ('' while on the stones). */
+  side: '' | 'a' | 'b';
 };
 
-const EMPTY: WorldHud = { objective: '', distance: 0, bearing: null, signal: null, result: '', scored: false };
+const EMPTY: WorldHud = { objective: '', distance: 0, bearing: null, signal: null, result: '', scored: false, side: '' };
 let current = EMPTY;
 const listeners = new Set<() => void>();
 
 export function setWorldHud(next: WorldHud) {
-  if (next.objective === current.objective && next.distance === current.distance && next.bearing === current.bearing && next.signal === current.signal && next.result === current.result && next.scored === current.scored) return;
+  if (next.objective === current.objective && next.distance === current.distance && next.bearing === current.bearing && next.signal === current.signal && next.result === current.result && next.scored === current.scored && next.side === current.side) return;
   current = next;
   listeners.forEach((listener) => listener());
 }

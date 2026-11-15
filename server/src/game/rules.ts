@@ -31,11 +31,11 @@ export function placementPoints(place: number): number {
 
 /** Red Light, Green Light field, in metres. Mirrors RLGL in client/src/game/levels.ts (pixels there). */
 export const RLGL_FIELD = {
-  spawnX: -3.0, // where players line up, behind the left roses
-  startX: -2.74, // the rose watches from here...
-  finishX: 2.43, // ...to here
-  laneTop: -0.35,
-  laneBottom: 2.05,
+  spawnX: -3.14, // where players line up: on the left row of roses
+  startX: -2.87, // the rose watches from a robot's width past them...
+  finishX: 1.96, // ...to just before the right row
+  laneTop: -0.35, // below the pond
+  laneBottom: 1.65,
   // Nobody can leave the picture.
   minX: -3.55,
   maxX: 3.55,

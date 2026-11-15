@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { play } from '../audio';
 import { send } from '../protocol/roomClient';
 import type { Snapshot } from '../protocol/types';
+import { useWorldHud } from '../scene/worldHud';
 
 /** Reads the server's JSON list for a mini-game, or gives the fallback if it is missing or malformed. */
 function parseBoard<T>(board: string, fallback: T): T {
@@ -12,20 +13,37 @@ function parseBoard<T>(board: string, fallback: T): T {
   }
 }
 
-/** Pick a Side: the question, with each answer on the side of the screen you walk to for it. */
+/**
+ * Pick a Side: the question, with each answer on the side of the screen you walk to for it.
+ * Each card has the colour its bank glows in the level. The card for the bank you are standing
+ * on is marked, and the middle says what your pick is.
+ */
 export function SidePanel({ game }: { game: Snapshot }) {
+  const { side } = useWorldHud();
   const counts = parseBoard<{ a?: number; b?: number }>(game.board, {});
   const decided = game.stage === 'result';
   const winner = decided && counts.a !== counts.b ? ((counts.a ?? 0) > (counts.b ?? 0) ? 'a' : 'b') : '';
+  const watching = Boolean(game.players.find((player) => player.id === game.selfId)?.eliminated);
+  const option = (key: 'a' | 'b', text: string, count = 0) => (
+    <p className={`sides__option sides__option--${key}${side === key ? ' sides__option--here' : ''}${winner === key ? ' sides__option--won' : ''}`}>
+      <small>{key === 'a' ? '\u25C0 Red bank, on the left' : 'Blue bank, on the right \u25B6'}</small>
+      {text}
+      {decided && <strong>{count}</strong>}
+      {side === key && <span className="sides__here">You are here</span>}
+    </p>
+  );
   return (
     <section className="sides" aria-label="Pick a side" aria-live="polite">
-      <p className={`sides__option sides__option--roses${winner === 'a' ? ' sides__option--won' : ''}`}>
-        <small>Roses, on the left</small>{game.optionA}{decided && <strong>{counts.a ?? 0}</strong>}
-      </p>
-      <h2 className="sides__question">{game.prompt}</h2>
-      <p className={`sides__option sides__option--boulders${winner === 'b' ? ' sides__option--won' : ''}`}>
-        <small>Boulders, on the right</small>{game.optionB}{decided && <strong>{counts.b ?? 0}</strong>}
-      </p>
+      {option('a', game.optionA, counts.a)}
+      <div className="sides__middle">
+        <h2 className="sides__question">{game.prompt}</h2>
+        {!watching && (
+          <p className={`sides__status${side ? '' : ' sides__status--none'}`}>
+            {side ? `Your pick: ${side === 'a' ? game.optionA : game.optionB}` : 'No pick yet. Walk to a bank.'}
+          </p>
+        )}
+      </div>
+      {option('b', game.optionB, counts.b)}
     </section>
   );
 }

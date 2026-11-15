@@ -18,6 +18,9 @@ let livePlayers: LivePlayer[] = [];
 const positions = new PositionBuffer();
 function receiveState() {
   if (!room) return;
+  // The server stamps its own time on the state as each timed phase begins.
+  const clock = (room.state as { clock?: unknown }).clock;
+  if (typeof clock === 'number' && clock > 0 && clock !== seenClock) { seenClock = clock; clockOffset = clock - Date.now(); }
   livePlayers = mapLivePlayers(room.state);
   positions.push(livePlayers, `${room.state.phase}:${room.state.round}`, performance.now());
   refresh();
@@ -27,6 +30,11 @@ let snapshotKey = '';
 let chat: ChatLine[] = [];
 let chatKey = 0;
 const listeners = new Set<() => void>();
+/** The server's clock minus this machine's, in milliseconds. Laptop clocks can disagree by seconds. */
+let clockOffset = 0;
+let seenClock = 0;
+/** The time on the server's clock. Phase deadlines are compared against this, so every screen counts down together. */
+export const serverNow = () => Date.now() + clockOffset;
 let caught = () => {};
 /** Called when the server sends the local player back to the start line. */
 export const onCaught = (handler: () => void) => { caught = handler; };

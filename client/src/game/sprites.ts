@@ -2,7 +2,7 @@
 // same 38-degree angle as the levels. Each sheet is an 8x6 grid of 360 px cells.
 //
 // A sheet is 25 MB once decoded, so each one is shrunk to two-thirds size and
-// uploaded once per look. Warm tinting happens on the GPU.
+// uploaded once per look, with its baked ground shadow removed. Warm tinting happens on the GPU.
 // Only looks that are on screen get loaded.
 
 const SHRINK = 2 / 3;
@@ -30,6 +30,19 @@ type AtlasFile = {
   meta?: { fps?: Record<string, number> };
 };
 
+/**
+ * The robot sheets come with a soft ground shadow under each robot. It read as a dark smudge
+ * on water, glass and stone, so it is taken out: it is the only translucent black in a sheet.
+ */
+export function removeShadow(ctx: CanvasRenderingContext2D) {
+  const pixels = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height);
+  const rgba = pixels.data;
+  for (let i = 0; i < rgba.length; i += 4) {
+    if (rgba[i + 3] < 250 && rgba[i] < 40 && rgba[i + 1] < 40 && rgba[i + 2] < 40) rgba[i + 3] = 0;
+  }
+  ctx.putImageData(pixels, 0, 0);
+}
+
 const cache = new Map<string, BotSheet | null>();
 const loading = new Set<string>();
 
@@ -50,9 +63,10 @@ async function load(look: string): Promise<BotSheet | null> {
   const image = document.createElement('canvas');
   image.width = full.width;
   image.height = full.height;
-  const ctx = image.getContext('2d')!;
+  const ctx = image.getContext('2d', { willReadFrequently: true })!;
   ctx.drawImage(full, 0, 0, image.width, image.height);
   full.close();
+  removeShadow(ctx);
   const frames: BotSheet['frames'] = {};
   for (const [name, entry] of Object.entries(file.frames ?? {})) {
     if (entry.frame) frames[name] = { x: entry.frame.x * SHRINK, y: entry.frame.y * SHRINK };

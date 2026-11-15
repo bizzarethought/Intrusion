@@ -1,6 +1,7 @@
 // The pre-rendered levels from the art handoff (public/assets/levels). Each is
-// one 1920x1080 image seen from 38 degrees above the ground, plus a JSON file
-// with its scale and spawn points. All positions here are pixels on that image.
+// one 1920x1080 image seen from 38 degrees above the ground, with a JSON file
+// (scale, spawn points, things to walk behind), a foreground layer and a
+// collision map. All positions here are pixels on that image.
 
 export const LEVEL_WIDTH = 1920;
 export const LEVEL_HEIGHT = 1080;
@@ -17,7 +18,17 @@ export type Level = {
   /** How tall a robot's body is drawn on this level. */
   botHeight: number;
   spawns: Spot[];
+  /** The things a robot can walk behind, as one transparent image the size of the level. */
+  foreground: HTMLImageElement | null;
+  /** Rectangles of `foreground` to draw in depth order with the robots; `baseY` is where each touches the ground. */
+  occluders: Array<{ x: number; y: number; width: number; height: number; baseY: number }>;
+  /** One byte per cell of the 480x270 collision map: 1 where a robot may stand. */
+  collision: Uint8Array | null;
+  /** Red Light, Green Light: where the watching rose is drawn. */
+  watcher: Spot | null;
 };
+export const COLLISION_WIDTH = 480;
+export const COLLISION_HEIGHT = 270;
 
 /** Which level each mini-game is played on. Anything else (lobby, votes) uses the oak. */
 export const LEVEL_FOR_GAME: Record<string, LevelId> = {
@@ -29,12 +40,7 @@ export const LEVEL_FOR_GAME: Record<string, LevelId> = {
 
 /** Red Light, Green Light: run left to right from one line of roses to the other. */
 export const RLGL = {
-  startX: 250, // the field starts a robot's width past the left rose line
-  finishX: 1590, // just left of the right rose line
-  laneTop: 480,
-  laneBottom: 870,
-  /** The giant rose that watches the field. */
-  watcher: { x: 1790, y: 410, radius: 230 },
+  startX: 215, // the field starts a robot's width past the left rose line
 };
 
 /** Glass Bridge: seven columns of two glass panels between the banks. Mirrors BRIDGE in server/src/game/minigames.ts. */
@@ -49,16 +55,32 @@ export const BRIDGE = {
   bottom: 618,
   panelWidth: 124,
   panelHeight: 86,
+  /** How far left of the glass a player may reach from the bank: the grass does not touch the near row, so this is the step onto it. */
+  apron: 75,
 };
 
-/** Pick a Side: the rose bank, the boulder bank, and the stepping stones between. */
+/** Glass Bridge: true over the water between the banks, where a robot is on a panel or about to step onto one. */
+export function overBridge(level: Level, x: number, y: number): boolean {
+  if (x >= BRIDGE.right || y < BRIDGE.top || y > BRIDGE.bottom) return false;
+  return x >= BRIDGE.left || (x >= BRIDGE.left - BRIDGE.apron && !onGround(level, x, y));
+}
+
+/**
+ * Pick a Side: the red bank on the left, the blue bank on the right, and one row of stepping
+ * stones across the pond between (from leftX to rightX). Nothing below `bottom` is in play, so
+ * the stones are the only way across, and any grass a robot stands on belongs to one bank or the
+ * other. Mirrors SIDES in server/src/game/minigames.ts.
+ */
 export const SIDES = {
-  leftX: 760,
-  rightX: 1600,
+  leftX: 745,
+  rightX: 1672,
+  stonesTop: 440,
+  stonesBottom: 545,
+  bottom: 720,
   stones: [[700, 480], [900, 470], [1105, 490], [1310, 505], [1512, 478]],
 };
 
-/** The platform (glass panel or stepping stone) under a point, if any: its name and centre. */
+/** The glass panel under a point, if any: its name and centre. */
 export function platformAt(level: LevelId, x: number, y: number): { key: string; x: number; y: number } | null {
   if (level === 'bridge' && x >= BRIDGE.left && x < BRIDGE.right && y >= BRIDGE.top && y <= BRIDGE.bottom) {
     const col = Math.min(6, Math.floor((x - BRIDGE.left) / BRIDGE.columnWidth));
@@ -67,55 +89,90 @@ export function platformAt(level: LevelId, x: number, y: number): { key: string;
     // Only the middle of a panel counts as standing on it, as on the server.
     return Math.abs(x - centre.x) < BRIDGE.columnWidth * 0.36 && Math.abs(y - centre.y) < 34 ? { key: `${col}:${row}`, ...centre } : null;
   }
-  if (level === 'side') {
-    const stone = SIDES.stones.find(([sx, sy]) => Math.hypot(x - sx, (y - sy) / DEPTH_SQUASH) < 95);
-    if (stone) return { key: `stone-${stone[0]}`, x: stone[0], y: stone[1] };
-  }
   return null;
 }
 
 /**
- * Where a robot may stand. The art has no collision maps yet, so these are
- * rough hand-drawn shapes: stay on the grass, out of the water.
+ * Pick a Side: the bank a player's position counts for ('a' left, 'b' right), or '' on the stones.
+ * The same test as the server's sideOf: off the row of stones, left of the middle stone is the left bank.
  */
-export function walkable(level: LevelId, x: number, y: number): boolean {
-  if (x < 30 || x > LEVEL_WIDTH - 30 || y < 250 || y > LEVEL_HEIGHT - 60) return false;
-  if (level === 'rlgl') {
-    if (y < 310 || y > 930) return false; // top bank and the water along the bottom
-    if (x > 980 && x < 1650 && y < 470) return false; // the pond
-    if (x > 1640 && Math.hypot(x - RLGL.watcher.x, y - RLGL.watcher.y) < 190) return false; // the giant rose
-  }
-  if (level === 'bridge') {
-    if (x < BRIDGE.left) return y > 290 && y < 650; // left bank
-    if (x < BRIDGE.right) return y >= BRIDGE.top && y <= BRIDGE.bottom; // over the water there is only the bridge
-    return y > 380 && y < 900 && Math.hypot(x - 1720, y - 460) > 110; // right bank, around its rose
-  }
-  if (level === 'side') {
-    if (x < SIDES.leftX && y > 250 && y < 690 && !(x < 450 && y < 290)) return true; // rose bank, below the giant rose
-    if (x > SIDES.rightX && y > 430 && y < 1020) return true; // boulder bank
-    return x >= 640 && x <= 1620 && y > 440 && y < 545; // the stepping stones
-  }
-  return true;
+export function bankAt(x: number, y: number): '' | 'a' | 'b' {
+  const onStones = x > SIDES.leftX && x < SIDES.rightX && y > SIDES.stonesTop && y < SIDES.stonesBottom;
+  return onStones ? '' : x < SIDES.stones[2][0] ? 'a' : 'b';
 }
 
-type LevelFile = { pixels_per_meter?: number; bot_height_px?: number; spawn_points?: Array<{ px?: [number, number] }> };
+/** Solid ground by the level's collision map: white is ground; black is water, boulders and trunks. */
+export function onGround(level: Level, x: number, y: number): boolean {
+  if (!level.collision) return true;
+  if (x < 0 || y < 0 || x >= LEVEL_WIDTH || y >= LEVEL_HEIGHT) return false;
+  return level.collision[Math.floor(y / 4) * COLLISION_WIDTH + Math.floor(x / 4)] === 1;
+}
+
+/** Where the local player may move to. */
+export function walkable(level: Level, x: number, y: number): boolean {
+  // Keep the whole robot and its name in the picture.
+  if (x < 30 || x > LEVEL_WIDTH - 30 || y < 250 || y > LEVEL_HEIGHT - 60) return false;
+  if (level.id === 'side') {
+    if (y > SIDES.bottom) return false;
+    // The row of stepping stones crosses the pond, which the map marks as water. A robot in this
+    // strip is drawn on the nearest stone (see the game view), never in the water.
+    if (x >= 640 && x <= SIDES.rightX + 20 && y > SIDES.stonesTop && y < SIDES.stonesBottom) return true;
+  }
+  if (level.id === 'bridge' && overBridge(level, x, y)) return true;
+  return onGround(level, x, y);
+}
+
+type LevelFile = {
+  pixels_per_meter?: number;
+  bot_height_px?: number;
+  spawn_points?: Array<{ px?: [number, number] }>;
+  occluders?: Array<{ box_px?: [number, number, number, number]; base_y_px?: number }>;
+  watcher_rose?: { centre_px?: [number, number] };
+};
 const cache = new Map<LevelId, Promise<Level>>();
+
+/** An image from the levels folder, or null if it is missing (older art has no foreground or collision map). */
+const picture = (name: string) => new Promise<HTMLImageElement | null>((resolve) => {
+  const img = new Image();
+  img.onload = () => resolve(img);
+  img.onerror = () => resolve(null);
+  img.src = `/assets/levels/${name}`;
+});
 
 export function loadLevel(id: LevelId): Promise<Level> {
   let pending = cache.get(id);
   if (!pending) {
     pending = (async () => {
-      const [file, image] = await Promise.all([
+      const [file, image, foreground, map] = await Promise.all([
         fetch(`/assets/levels/${id}.json`).then((response) => response.json() as Promise<LevelFile>),
-        new Promise<HTMLImageElement>((resolve, reject) => {
-          const img = new Image();
-          img.onload = () => resolve(img);
-          img.onerror = () => reject(new Error(`level image ${id} is missing`));
-          img.src = `/assets/levels/${id}_bg.png`;
-        }),
+        picture(`${id}_bg.png`),
+        picture(`${id}_fg.png`),
+        picture(`${id}_collision.png`),
       ]);
+      if (!image) throw new Error(`level image ${id} is missing`);
       const spawns = (file.spawn_points ?? []).flatMap((point) => (point.px ? [{ x: point.px[0], y: point.px[1] }] : []));
-      return { id, image, pixelsPerMeter: file.pixels_per_meter ?? 270, botHeight: file.bot_height_px ?? 165, spawns };
+      // Boxes can hang over the edge of the picture; keep the part that is on it.
+      const occluders = (file.occluders ?? []).flatMap(({ box_px: box, base_y_px: baseY }) => {
+        if (!box || baseY === undefined) return [];
+        const x = Math.max(0, box[0]), y = Math.max(0, box[1]);
+        const width = Math.min(LEVEL_WIDTH, box[2]) - x, height = Math.min(LEVEL_HEIGHT, box[3]) - y;
+        return width > 0 && height > 0 ? [{ x, y, width, height, baseY }] : [];
+      });
+      let collision: Uint8Array | null = null;
+      if (map) {
+        const canvas = document.createElement('canvas');
+        canvas.width = COLLISION_WIDTH; canvas.height = COLLISION_HEIGHT;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+        ctx.drawImage(map, 0, 0, COLLISION_WIDTH, COLLISION_HEIGHT);
+        const pixels = ctx.getImageData(0, 0, COLLISION_WIDTH, COLLISION_HEIGHT).data;
+        collision = Uint8Array.from({ length: COLLISION_WIDTH * COLLISION_HEIGHT }, (_, i) => Number(pixels[i * 4] > 127));
+      }
+      const rose = file.watcher_rose?.centre_px;
+      return {
+        id, image, foreground, occluders, collision,
+        pixelsPerMeter: file.pixels_per_meter ?? 270, botHeight: file.bot_height_px ?? 165, spawns,
+        watcher: rose ? { x: rose[0], y: rose[1] } : null,
+      };
     })();
     cache.set(id, pending);
   }

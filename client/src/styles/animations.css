@@ -18,6 +18,8 @@
   8% { transform: translate(-6px, 2px) skewX(-8deg); }
   55% { transform: translate(5px, -2px); clip-path: inset(20% 0 35% 0); }
 }
+@keyframes count { 0% { scale: 1.6; opacity: 0; } 20% { scale: 1; opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes count-go { 0% { scale: 0.6; opacity: 0; } 20% { scale: 1.1; opacity: 1; } 70% { opacity: 1; } 100% { scale: 1.3; opacity: 0; visibility: hidden; } }
 @keyframes reveal-step { from { opacity: 0; transform: translateY(14px); } }
 
 /* The reveal plays out one beat at a time. */
@@ -31,5 +33,5 @@
 
 @media (prefers-reduced-motion: reduce) {
   #root *, #root *::before, #root *::after { animation: none !important; transition: none !important; }
-  .banner { display: none; }
+  .banner, .countdown--go { display: none; }
 }
