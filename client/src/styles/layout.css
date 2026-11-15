@@ -67,6 +67,7 @@
 
 /* Chat: notes passed round the meadow. */
 .chat { display: flex; flex-direction: column; gap: var(--space-2); min-height: 0; flex: 1; }
+.chat__reminder { margin: 0; padding: 7px 10px; border-left: 2px solid #a88c4e; background: #e4dfca; color: #515d47; font: 600 12px/1.4 var(--body); }
 .chat__log { flex: 1; min-height: 140px; max-height: 44vh; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px; }
 .chat__log li { padding: 7px 12px; background: #fffaf0; border: 1.5px solid var(--moss); border-radius: 4px 14px 14px 14px; }
 .chat__log li.muted { background: none; border: none; padding: 0; }
@@ -131,4 +132,56 @@
   .steps { grid-template-columns: repeat(2, 1fr); }
   .rank { grid-template-columns: 28px 56px 1fr 70px; }
   .rank .meter { display: none; }
+}
+
+/* Match interface: quiet field notes over the meadow. */
+.game .hud { top: 16px; left: 16px; right: 16px; gap: 10px; }
+.game .hud__where, .game .hud__timer, .game .hud__score,
+.game .hud__side .button {
+  background: rgba(22, 33, 24, .94); color: #f4eedc;
+  border: 1px solid rgba(226, 224, 193, .35); border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .2);
+}
+.game .hud__where { min-width: 168px; padding: 9px 13px; border-left: 3px solid #c6ad66; }
+.game .hud__where small { color: #c6ad66; font: 700 10px/1.2 var(--body); letter-spacing: .12em; text-transform: uppercase; }
+.game .hud__where strong { margin-top: 3px; font: 700 17px/1.15 var(--body); }
+.game .hud__timer { min-width: 88px; padding: 8px 14px; font: 700 25px/1 var(--machine); font-variant-numeric: tabular-nums; }
+.game .hud__timer--low { background: #8f2930; color: #fff; animation: none; }
+.game .hud__side { gap: 5px; }
+.game .hud__score { padding: 8px 11px; font: 700 16px/1.2 var(--machine); color: #e6cf83; }
+.game .hud__score small { font: 600 10px var(--body); text-transform: uppercase; }
+.game .hud__side .button { min-height: 36px; padding: 8px 10px; font: 650 12px/1 var(--body); }
+.game .hud__side .button:hover { background: #364b35; transform: none; }
+.game .signal { top: 74px; padding: 7px 16px; border: 1px solid currentColor; border-radius: 3px; box-shadow: 0 2px 8px #0004; font: 700 13px/1.2 var(--body); letter-spacing: .08em; text-transform: uppercase; }
+.game .signal--green { background: #dce9c5; color: #273f23; }
+.game .signal--red { background: #401b1d; color: #ffd4c9; }
+.game .objective, .game .toast { max-width: min(520px, calc(100vw - 32px)); padding: 8px 14px; color: #f4eedc; background: rgba(22, 33, 24, .94); border: 1px solid #d7d7b35e; border-radius: 3px; box-shadow: 0 2px 8px #0004; font: 600 13px/1.4 var(--body); }
+.game .toast { top: 124px; color: #f2d28a; }
+.game .banner { top: 34%; left: 50%; right: auto; width: min(600px, calc(100vw - 32px)); translate: -50% 0; padding: 18px 24px; background: #e9e2c8; border: 1px solid #263624; border-left: 5px solid #8d3b35; box-shadow: 0 6px 24px #0005; text-align: left; align-items: flex-start; }
+.game .banner strong { font: 700 clamp(26px, 4vw, 44px)/1.05 var(--display); letter-spacing: -.02em; }
+.game .banner span { font: 500 14px/1.4 var(--body); color: #536049; }
+.voting { background: #ede7d2; border: 1px solid #777b63; border-radius: 5px; box-shadow: 0 16px 50px #0007; padding: clamp(16px, 2.5vw, 28px); }
+.voting__header { padding-bottom: 14px; border-bottom: 1px solid #b9b49b; }
+.voting__header h2 { font-size: clamp(28px, 3vw, 40px); }
+.voting__header .kicker { font: 700 10px var(--body); letter-spacing: .12em; text-transform: uppercase; color: #667158; }
+.voting__header .hud__timer { border-radius: 3px; border: 1px solid #737a62; font: 700 22px var(--machine); min-width: 68px; padding: 8px; }
+.voting .card { border: 1px solid #b1b39d; border-radius: 4px; background: #e2ddc9; box-shadow: none; }
+.voting button.card:hover:not(:disabled) { transform: translateY(-2px); background: #f7f2df; }
+.voting .card--selected { border: 2px solid #a33935; background: #f1dbca; }
+.voting .card--selected::after { font-size: 12px; border-width: 2px; }
+.voting .chat__log li { border: 0; border-left: 2px solid #afb99d; border-radius: 0; background: #f8f4e6; }
+.voting .chat__log .chat__mine { border-left-color: #76939a; background: #e3ece7; }
+@media (max-width: 900px) {
+  .game .hud { grid-template-columns: 1fr auto; }
+  .game .hud__side { grid-column: 1 / -1; }
+  .game .signal { top: 110px; }
+  .game .toast { top: 155px; }
+}
+@media (max-width: 480px) {
+  .game .hud { top: 8px; left: 8px; right: 8px; }
+  .game .hud__where { min-width: 0; padding: 7px 9px; }
+  .game .hud__where strong { font-size: 14px; }
+  .game .hud__timer { min-width: 68px; font-size: 20px; }
+  .game .hud__side .button { padding: 7px; font-size: 11px; }
+  .game .objective { bottom: 10px; font-size: 12px; }
 }

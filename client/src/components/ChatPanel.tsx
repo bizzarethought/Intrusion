@@ -27,6 +27,7 @@ export function ChatPanel({ game, onClose }: { game: Snapshot; onClose?: () => v
   return (
     <section className="chat" aria-label="Chat">
       <header className="panel__header"><h2>Chat</h2>{onClose && <button className="button button--icon" onClick={onClose} aria-label="Close chat">✕</button>}</header>
+      <p className="chat__reminder">Keep your identity secret until the reveal.</p>
       <ol className="chat__log" ref={log} aria-live="polite">
         {game.chat.length === 0 && <li className="muted">No messages yet. Say what you saw.</li>}
         {game.chat.map((line) => {

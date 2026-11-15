@@ -24,12 +24,12 @@ export function GameHud({ game, unread, onScores, onChat, onSettings }: Props) {
         </div>
         <div className="hud__side">
           <span className="hud__score" aria-label="Your score">{me?.score ?? 0}<small>pts</small></span>
-          <button className="button button--icon" onClick={onScores} aria-label="Scoreboard">🏆</button>
+          <button className="button button--icon hud__control" onClick={onScores} aria-label="Scoreboard">Scores</button>
           <button className="button button--icon" onClick={onChat} aria-label={`Chat${unread ? `, ${unread} new` : ''}`}>
-            💬{unread > 0 && <span className="badge">{unread}</span>}
+            Chat{unread > 0 && <span className="badge">{unread}</span>}
           </button>
           <SoundToggle />
-          <button className="button button--icon" onClick={onSettings} aria-label="Settings">⚙</button>
+          <button className="button button--icon hud__control" onClick={onSettings} aria-label="Settings">Settings</button>
         </div>
       </header>
 
