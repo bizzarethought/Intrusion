@@ -18,6 +18,15 @@ export function GameHud({ game, unread, onScores, onChat, onSettings }: Props) {
           <small>{moving ? miniGameInfo(game.miniGame).name : PHASE_LABELS[game.phase] ?? game.phase} · round {game.round}</small>
           {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}
         </div>
+        <div className="hud__side">
+          <span className="hud__score" aria-label="Your score">{me?.score ?? 0}<small>pts</small></span>
+          <button className="button button--icon hud__control" onClick={onScores} aria-label="Scoreboard">Scores</button>
+          <button className="button button--icon" onClick={onChat} aria-label={`Chat${unread ? `, ${unread} new` : ''}`}>
+            Chat{unread > 0 && <span className="badge">{unread}</span>}
+          </button>
+          <SoundToggle />
+          <button className="button button--icon hud__control" onClick={onSettings} aria-label="Settings">Settings</button>
+        </div>
       </header>
       <nav className="hint ui" aria-label="Shortcuts">
         <button className="hint__key" onClick={onScores}><kbd>Tab</kbd>scores · {me?.score ?? 0}</button>
