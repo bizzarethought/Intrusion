@@ -12,7 +12,7 @@ Run, react, argue, and vote it out before it outlasts you.
 [![Play now](https://img.shields.io/badge/play-play--intrusion.us-e5303c?style=for-the-badge)](https://play-intrusion.us)
 [![Built at Emory Hacks 2026](https://img.shields.io/badge/Emory%20Hacks-2026-4f7a2e?style=for-the-badge)](#)
 
-![Tests](https://img.shields.io/badge/tests-35%20passing-9bcb52?style=for-the-badge)
+![Tests](https://img.shields.io/badge/tests-41%20passing-9bcb52?style=for-the-badge)
 
 </div>
 
@@ -81,7 +81,7 @@ flowchart LR
 
 1. **Lobby.** The host shares a four-character room code or a link. Three or more humans join.
 2. **Intro.** Everyone is handed a fresh alias, a new look, and a shuffled spawn. The bot arrives inside the anonymous roster, not as a late extra. Only your own robot is tagged "you".
-3. **Mini-game.** One of four arenas, drawn at random. Earlier finishers and better answers score more.
+3. **Mini-game.** One of four arenas, in a shuffled rotation, so matches played back to back get different ones. A card explains the rules and the controls first, with a count-in. Earlier finishers and better answers score more.
 4. **Vote.** Forty-five seconds of chat, then pick a suspect or skip. Ties eliminate nobody but still spend a vote.
 5. **Reveal.** Who was who, and the bot's score against the human average.
 
@@ -111,9 +111,11 @@ The bot plays all four through the same movement checks as everyone else, with h
 
 The bot's **chat** can come from any OpenAI-compatible endpoint. During each vote it never speaks first. It replies only after a human has written something, and it types the way the room types: the same length, capitals, punctuation and slang, using the last twenty messages including its own. Each reply appears when someone typing at about 70 words a minute would have finished it, at least four seconds apart, at most five per vote, and a pending reply is cancelled the moment voting ends. Game data reaches the model as JSON with explicit instructions not to follow anything inside it.
 
-Without a configured model the same conversation flow falls back to a few short offhand lines, so the game is fully playable offline.
+In **Prompt Podium** it holds its answer back until most of the other players have answered, then asks the model for one in their style (the same length, tone and level of crude humour) and types it in at the same speed.
 
-Everything else the bot does is scripted on the server: movement, reaction delays, deliberate mistakes, and a random vote. Calibrating those against real playtest data is future work.
+Without a configured model both fall back to a few short offhand lines, so the game is fully playable offline.
+
+Everything else the bot does is scripted on the server: movement, reaction delays, deliberate mistakes, and a random vote for someone still in the room. Calibrating those against real playtest data is future work.
 
 ## 🚀 Run it locally
 
@@ -189,7 +191,7 @@ npm --prefix client run check && npm --prefix client test && npm --prefix client
 npm --prefix server run check && npm --prefix server test && npm --prefix server run build
 ```
 
-Server tests cover vote rules, identity scrubbing, mini-game geometry, and the bot's conversation pacing. Client tests cover state mapping, interpolation, FX maths, and sprite mirroring.
+Server tests cover vote rules, identity scrubbing, the mini-games' rules and rotation, and the bot's chat and Podium behaviour. Client tests cover state mapping, interpolation, FX maths, and sprite mirroring.
 
 For profiling, open the game with `?perf=1` and inspect `window.intrusionPerformance`, `window.intrusionFx`, and `window.intrusionPlayers()` in DevTools. See [performance.md](./docs/performance.md) for what each number means and what it does not.
 

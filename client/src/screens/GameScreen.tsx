@@ -2,11 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { play } from '../audio';
 import { ChatPanel } from '../components/ChatPanel';
 import { GameHud } from '../components/GameHud';
+import { GetReady } from '../components/GetReady';
 import { PodiumPanel, SidePanel } from '../components/MiniGamePanels';
-import { PhaseBanner } from '../components/PhaseBanner';
 import { Scoreboard } from '../components/Scoreboard';
 import { SettingsPanel } from '../components/SettingsPanel';
-import { useCountdown } from '../hooks/useCountdown';
 import { leave } from '../protocol/roomClient';
 import type { Snapshot } from '../protocol/types';
 import { RevealScreen } from './RevealScreen';
@@ -30,19 +29,7 @@ function useRoundTracker(game: Snapshot) {
   };
 }
 
-/** 3, 2, 1 before a mini-game starts, then "Go!". It reads the server's clock, so every screen shows the same number. */
-function Countdown({ game }: { game: Snapshot }) {
-  const seconds = useCountdown(game.phaseEndsAt);
-  const counting = game.phase === 'travel' && seconds > 0 && seconds <= 3;
-  useEffect(() => { if (counting) play('click'); }, [counting, seconds]);
-  // Prompt Podium has its card where the count-in usually goes, so there it sits higher.
-  const place = game.miniGame === 'prompt-podium' ? ' countdown--high' : '';
-  if (counting) return <div key={seconds} className={`countdown${place}`} role="status" aria-live="assertive">{seconds}</div>;
-  // Stays mounted through the mini-game; its animation ends hidden.
-  return game.phase === 'minigame' ? <div className={`countdown countdown--go${place}`} aria-hidden="true">Go!</div> : null;
-}
-
-/** Everything during a match: the HUD over the 3D world, plus whatever the phase needs. */
+/** Everything during a match: the HUD over the game view, plus whatever the phase needs. */
 export function GameScreen({ game }: { game: Snapshot }) {
   const [open, setOpen] = useState<'scores' | 'chat' | 'settings' | null>(null);
   const [readCount, setReadCount] = useState(0);
@@ -73,10 +60,9 @@ export function GameScreen({ game }: { game: Snapshot }) {
   return (
     <div className="screen game">
       <GameHud game={game} unread={game.chat.length - readCount} onScores={() => toggle('scores')} onChat={() => toggle('chat')} onSettings={() => toggle('settings')} />
-      {game.phase === 'travel' && <PhaseBanner miniGame={game.miniGame} />}
-      {moving && <Countdown game={game} />}
+      {moving && <GetReady key={game.round} game={game} />}
       {moving && game.miniGame === 'pick-a-side' && <SidePanel game={game} />}
-      {moving && game.miniGame === 'prompt-podium' && <PodiumPanel key={game.round} game={game} />}
+      {game.phase === 'minigame' && game.miniGame === 'prompt-podium' && <PodiumPanel key={game.round} game={game} />}
       {game.phase === 'voting' && <VotingScreen key={game.round} game={game} />}
       {game.phase === 'scoreboard' && <Scoreboard game={game} gains={gains} votedOut={votedOut} final />}
       {!known && (

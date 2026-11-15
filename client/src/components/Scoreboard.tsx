@@ -30,7 +30,7 @@ export function Scoreboard({ game, gains, votedOut, final, onClose }: Props) {
         )}
         <ol className="rows">
           {ranked.map((player, i) => (
-            <li key={player.id} className={`rank${player.eliminated ? ' rank--out' : ''}`} style={{ animationDelay: `${i * 60}ms` }}>
+            <li key={player.id} className={`rank${player.eliminated ? ' rank--out' : ''}`}>
               <span className="rank__place">{i + 1}</span>
               <Sprite variantId={variantFor(player.id, game.selfId)} frame={player.eliminated ? 'deactivated' : undefined} size={56} />
               <span className="rank__name">

@@ -2,13 +2,12 @@
  * Two voices, taken from the game's own art and story:
  *   Nature  - the meadow. Petal-cream paper, leaf-shaped corners, moss ink,
  *             the soft Fraunces serif. Used for everything the players do.
- *   Machine - the intruder. Pure black, rose red, square corners, monospace,
- *             scanlines. Used only where the AI shows itself: the watching
- *             rose, the Turing check, the reveal.
+ *   Machine - the intruder. Pure black, rose red, square corners, monospace.
+ *             Used only where the AI shows itself: the watching rose and
+ *             the reveal.
  */
 :root {
   --moss: #10190f;
-  --soil: #22331c;
   --leaf: #4f7a2e;
   --sprout: #9bcb52;
   --petal: #f3ecd8;
@@ -17,7 +16,6 @@
   --rose-deep: #8f0f1c;
   --pond: #2a93c6;
   --dandelion: #f2c230;
-  --accent: var(--leaf);
 
   --display: 'Fraunces', 'Iowan Old Style', Georgia, serif;
   --body: system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -31,7 +29,6 @@
   --space-3: 20px;
   --space-4: 32px;
   --fast: 120ms;
-  --medium: 300ms;
   --slow: 700ms;
 }
 
@@ -68,11 +65,11 @@ kbd { display: inline-block; min-width: 26px; padding: 2px 6px; margin-right: 3p
 
 /* Machine surface: where the AI shows itself. */
 .machine {
-  background: #000 repeating-linear-gradient(0deg, transparent 0 3px, rgba(229, 48, 60, 0.09) 3px 4px);
+  background: #000;
   color: #ffd9dc;
   border: 2px solid var(--rose);
   border-radius: 0;
-  box-shadow: 0 0 0 4px #000, 0 0 60px rgba(229, 48, 60, 0.45);
+  box-shadow: 0 0 0 4px #000;
   font-family: var(--machine);
 }
 .machine h2 { font: 700 30px/1.1 var(--machine); letter-spacing: -0.02em; color: var(--rose); }
@@ -129,7 +126,6 @@ input:disabled { background: var(--petal-shade); }
 .tag--host { background: var(--dandelion); }
 .tag--out { background: var(--rose); color: #fff; }
 .badge { position: absolute; top: -8px; right: -8px; min-width: 20px; padding: 2px 5px; border-radius: 999px; background: var(--rose); color: #fff; font-size: 11px; font-weight: 800; }
-.note { font-size: 14px; padding: 10px 12px; border-left: 5px solid var(--dandelion); background: #fff3c4; }
 .result { font-weight: 700; color: #5a6650; }
 .result--done { color: var(--leaf); }
 .plain li { margin: 6px 0; font-size: 14px; }
@@ -156,7 +152,3 @@ button.card:disabled { cursor: not-allowed; opacity: 0.55; box-shadow: none; }
 .card__name > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .card__meta { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #44503c; }
 
-/* A taped note, not a side-striped card. */
-.note { border: 2px solid var(--moss); border-left-width: 2px; rotate: 0.6deg; box-shadow: 3px 4px 0 var(--moss); }
-/* The machine without the neon glow: plain black, hard red edge. */
-.machine { background: #000; box-shadow: 0 0 0 4px #000; }

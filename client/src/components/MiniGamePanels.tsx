@@ -56,17 +56,16 @@ export function PodiumPanel({ game }: { game: Snapshot }) {
 
   return (
     <section className="panel podium ui" aria-label="Prompt Podium">
-      <span className="kicker">{game.phase === 'travel' ? 'Get ready to answer' : game.stage === 'vote' ? 'Pick the funniest' : game.stage === 'results' ? 'Who wrote what' : 'Type your answer'}</span>
+      <span className="kicker">{game.stage === 'vote' ? 'Pick the funniest' : game.stage === 'results' ? 'Who wrote what' : 'Type your answer'}</span>
       <h2>{game.prompt}</h2>
 
       {game.stage === 'answer' && !out && (
         <form className="podium__form" onSubmit={submit}>
-          <input value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={ANSWER_LENGTH} placeholder="Your answer" aria-label="Your answer"
-            disabled={game.phase !== 'minigame'} autoFocus />
-          <button className="button button--primary" disabled={!draft.trim() || game.phase !== 'minigame'}>{sent ? 'Change it' : 'Lock it in'}</button>
+          <input value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={ANSWER_LENGTH} placeholder="Your answer" aria-label="Your answer" autoFocus />
+          <button className="button button--primary" disabled={!draft.trim()}>{sent ? 'Change it' : 'Lock it in'}</button>
         </form>
       )}
-      {game.stage === 'answer' && sent && <p className="result result--done" role="status">Locked in: "{sent}". You can change it until time runs out.</p>}
+      {game.stage === 'answer' && sent && <p className="result result--done" role="status">Locked in: "{sent}". You can change it until everyone has answered.</p>}
       {game.stage === 'answer' && out && <p className="muted">You were voted out, so you are watching this one.</p>}
 
       {game.stage === 'vote' && (

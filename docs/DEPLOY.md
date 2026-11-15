@@ -61,4 +61,6 @@ HOST=<IP> KEY=~/.ssh/intrusion.pem ./deploy/deploy.sh
 
 - Server logs: `ssh ... 'pm2 logs intrusion'`
 - Restart: `ssh ... 'pm2 restart intrusion'`
-- The AI key lives in `server/.env` on your laptop (git-ignored) and is copied to `/opt/intrusion/.env` by the deploy script.
+- The AI key lives in `server/.env` on your laptop (git-ignored) and is copied to `/opt/intrusion/.env` by the deploy script. A `MINI_GAMES` line in that file (a fixed order, for testing on a laptop) is left behind, so the live game always rotates through all four.
+- Art under `/assets/` is served with `Cache-Control: no-cache`: browsers keep it but ask on each visit whether it changed. When level art changes, also bump `VERSION` in `client/src/game/levels.ts`.
+- The deploy restarts the game server, which ends any match in progress.

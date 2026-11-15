@@ -1,8 +1,8 @@
 # Frontend rendering and profiling
 
-Gameplay uses PixiJS/WebGL: one background texture, one shared texture source per loaded robot look, cached frame views, cached name labels, and a shared shadow sprite. Pixi batches compatible sprites while preserving foot-depth order. No physics, live lighting, or blur filters are used. The new FX layer animates at most 96 foliage pieces (48 on narrow screens), below the 150-piece ceiling.
+Gameplay uses PixiJS/WebGL: one background texture, one shared texture source per loaded robot look, cached frame views, and cached name labels. Pixi batches compatible sprites while preserving foot-depth order. No physics, live lighting, or blur filters are used. The new FX layer animates at most 96 foliage pieces (48 on narrow screens), below the 150-piece ceiling.
 
-The display resolution multiplier is capped at 1.5. Source backgrounds are unchanged. Gameplay sheets decode directly at 1920 × 1440 (240 px per frame), rather than decoding at full size and running a JavaScript tint loop. Warm tint is applied on the GPU. Assets load on demand for visible looks; the landing page uses one demo look. Portraits are loaded for assigned lobby looks. Previously loaded looks remain cached for reuse.
+The display resolution multiplier is capped at 1.5. Level backgrounds ship as JPEG and the robot sheets at the size they are drawn (1920 × 1440, 240 px per frame); the ground shadow baked into each sheet is stripped once as it loads. Warm tint is applied on the GPU. Assets load on demand for visible looks; the landing page uses one demo look. Portraits are loaded for assigned lobby looks. Previously loaded looks remain cached for reuse.
 
 Game movement and portrait animation update outside React state. Network positions are captured once per state patch, rather than rebuilding and sorting the roster every animation frame. Remote players render 100 ms behind the latest arrival timeline, interpolating between samples. Local movement remains predicted immediately; phase changes reset the buffer and respawns snap. Missing packets hold the last known remote position rather than extrapolating through obstacles.
 

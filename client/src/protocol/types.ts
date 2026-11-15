@@ -22,31 +22,42 @@ export const PHASE_LABELS: Record<string, string> = {
 
 export type MiniGame = {
   name: string;
+  /** The rules, in a sentence or two. */
   how: string;
+  /** How you play it with your hands. Shown on the get-ready card. */
+  controls: string;
+  /** Set where the controls are not what a player would guess, so the card shouts them. */
+  loud?: boolean;
 };
 
 export const MINI_GAMES: Record<string, MiniGame> = {
   'red-light-green-light': {
     name: 'Red Light, Green Light',
-    how: 'Sprint to the finish. Move on red and you go back to the start.',
+    how: 'Run from the left row of roses to the right one. Move while the big rose is watching and you go back to the start.',
+    controls: 'Move with W A S D or the arrow keys, or click where you want to go.',
   },
   'pick-a-side': {
     name: 'Pick a Side',
-    how: 'A would-you-rather. Cross the stones to the red bank or the blue bank before time runs out.',
+    how: 'A would-you-rather. Be standing on the bank of your answer when time runs out. The bigger crowd scores most.',
+    controls: 'Hop the stones with W A S D or the arrow keys, or click where you want to go.',
   },
   'prompt-podium': {
     name: 'Prompt Podium',
-    how: 'Type an answer, then vote for the funniest one.',
+    how: 'Everyone answers the same prompt. Then you vote for the funniest answer that is not yours.',
+    controls: 'Type your answer in the box and press Enter.',
   },
   'glass-bridge-memory': {
     name: 'Glass Bridge Memory',
-    how: 'Safe panels flash once. Then click the next panel to hop onto it. A wrong one drops you back.',
+    how: 'The safe panels light up once. Memorise them, then cross from memory. A wrong panel drops you back on the bank.',
+    controls: 'CLICK a panel to hop onto it. You cannot walk on the bridge.',
+    loud: true,
   },
 };
 
 export const UNKNOWN_MINI_GAME: MiniGame = {
   name: 'Mystery arena',
   how: 'This mini-game is new to this version of the game.',
+  controls: 'Reload the page to get the latest version.',
 };
 
 export const miniGameInfo = (id: string): MiniGame => MINI_GAMES[id] ?? UNKNOWN_MINI_GAME;
@@ -97,5 +108,5 @@ export type Snapshot = {
   chat: ChatLine[];
 };
 
-/** Live values the 3D world reads every frame. */
+/** Live values the game view reads every frame. */
 export type LivePlayer = { id: string; name: string; x: number; z: number; eliminated: boolean; finished: boolean };

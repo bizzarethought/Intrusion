@@ -1,11 +1,6 @@
 /* Motion is kept for moments that mean something: the machine breaking in,
    a phase changing, the reveal. Everything is off for reduced-motion visitors. */
 @keyframes pulse { 50% { opacity: 0.5; } }
-@keyframes banner {
-  0% { opacity: 0; transform: scaleY(0); }
-  12%, 80% { opacity: 1; transform: scaleY(1); }
-  100% { opacity: 0; transform: scaleY(0); visibility: hidden; }
-}
 /* A strip of the title flickers into the machine's type, at different heights. */
 @keyframes intrude {
   0%, 62%, 66%, 71%, 100% { clip-path: inset(100% 0 0 0); }
@@ -18,20 +13,20 @@
   8% { transform: translate(-6px, 2px) skewX(-8deg); }
   55% { transform: translate(5px, -2px); clip-path: inset(20% 0 35% 0); }
 }
+/* The count-in before a mini-game, and the bar that drains while its card is up. */
 @keyframes count { 0% { scale: 1.6; opacity: 0; } 20% { scale: 1; opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
-@keyframes count-go { 0% { scale: 0.6; opacity: 0; } 20% { scale: 1.1; opacity: 1; } 70% { opacity: 1; } 100% { scale: 1.3; opacity: 0; visibility: hidden; } }
+@keyframes drain { to { transform: scaleX(0); } }
 @keyframes reveal-step { from { opacity: 0; transform: translateY(14px); } }
 
 /* The reveal plays out one beat at a time. */
-.step-1, .step-2, .step-3, .step-4, .step-5, .step-6 { animation: reveal-step var(--slow) both; }
+.step-1, .step-2, .step-3, .step-4, .step-5 { animation: reveal-step var(--slow) both; }
 .step-1 { animation-delay: 0.3s; }
 .step-2 { animation-delay: 1.8s; }
 .step-3 { animation-delay: 3.2s; }
 .step-4 { animation-delay: 4.2s; }
 .step-5 { animation-delay: 5s; }
-.step-6 { animation-delay: 5.8s; }
 
 @media (prefers-reduced-motion: reduce) {
   #root *, #root *::before, #root *::after { animation: none !important; transition: none !important; }
-  .banner, .countdown--go { display: none; }
+  .ready__bar { display: none; }
 }

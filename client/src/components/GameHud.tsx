@@ -15,7 +15,7 @@ export function GameHud({ game, unread, onScores, onChat, onSettings }: Props) {
   return (
     <>
       <header className="hud hud--quiet">
-        <div className={`hud__timer${seconds <= 10 && seconds > 0 ? ' hud__timer--low' : ''}`} role="timer" aria-label="Time left">
+        <div className={`hud__timer${game.phase === 'minigame' && seconds <= 10 && seconds > 0 ? ' hud__timer--low' : ''}`} role="timer" aria-label="Time left">
           <small>{moving ? miniGameInfo(game.miniGame).name : PHASE_LABELS[game.phase] ?? game.phase} · round {game.round}</small>
           {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}
         </div>
@@ -35,7 +35,7 @@ export function GameHud({ game, unread, onScores, onChat, onSettings }: Props) {
           {hud.signal === 'green' ? 'The rose is open. Go!' : 'THE ROSE IS WATCHING'}
         </div>
       )}
-      {moving && hud.objective && <div className="objective" role="status" aria-live="polite">{hud.objective}</div>}
+      {game.phase === 'minigame' && hud.objective && <div className="objective" role="status" aria-live="polite">{hud.objective}</div>}
       {hud.result && <div className="toast" role="status">{hud.result}</div>}
     </>
   );

@@ -93,3 +93,62 @@ test("rotation: matches played back to back get different games, and no match re
     assert.equal(new Set(four).size, MINI_GAME_IDS.length, four.join(", "));
   }
 });
+
+/** Three humans and the AI at the podium, with a model whose reply the test controls. */
+function podium() {
+  const state = new GameState();
+  const people = ["ann", "bo", "cy", "bot"].map((id) => {
+    const player = new PlayerState();
+    player.id = id;
+    state.players.set(id, player);
+    return player;
+  });
+  const asked: string[][] = [];
+  let reply: (line: string | null) => void = () => {};
+  const host: Host = {
+    state, bot: () => people[3], playing: () => people, finish() {}, endIn() {},
+    askAi: (_prompt, others) => { asked.push(others); return new Promise((resolve) => { reply = resolve; }); },
+  };
+  const game = createMiniGame("prompt-podium");
+  game.setup(host, people);
+  game.begin(host, 1_000);
+  const answer = (who: number, text: string, at: number) => game.message(host, people[who], "answer", { text }, at);
+  /** Gives the model's reply and lets it land. */
+  const model = async (line: string | null) => { reply(line); await new Promise((resolve) => setImmediate(resolve)); };
+  const answers = () => (JSON.parse(state.board) as Array<{ text: string }>).map((entry) => entry.text);
+  return { state, host, game, asked, answer, model, answers };
+}
+
+test("podium: the AI waits for most of the others, then answers in their style at a typist's speed", async (t) => {
+  t.mock.method(Math, "random", () => 0); // the shortest waits, and 65 words a minute
+  const { state, host, game, asked, answer, model, answers } = podium();
+  answer(0, "ur mum", 2_000); game.tick(host, 2_100);
+  assert.equal(asked.length, 0); // one of three is not most of them
+  answer(1, "a wet sock lol", 3_000); game.tick(host, 3_100);
+  assert.deepEqual(asked, [["ur mum", "a wet sock lol"]]); // asked once, with their answers to copy the style of
+  await model('"A Slightly Damp Biscuit."');
+  answer(2, "bees", 3_500);
+  const line = "a slightly damp biscuit"; // no quotes, capitals or full stop: nobody else used them
+  const typed = 3_100 + 1_200 + Math.ceil((line.length * 12_000) / 65);
+  game.tick(host, typed - 200);
+  assert.equal(state.stage, "answer"); // still typing: the round waits for it like for any slow player
+  game.tick(host, typed + 100);
+  assert.equal(state.stage, "vote");
+  assert.ok(answers().includes(line), answers().join(" | "));
+});
+
+test("podium: the AI stops waiting when time runs short, and never shows a copied answer or a refusal", async (t) => {
+  t.mock.method(Math, "random", () => 0);
+  for (const bad of ["ur mum", "I'm sorry, but I can't help with that.", "", null]) {
+    const { state, host, game, asked, answer, model, answers } = podium();
+    answer(0, "ur mum", 2_000);
+    game.tick(host, 10_900);
+    assert.equal(asked.length, 0); // still hoping for more answers to go on
+    game.tick(host, 11_000);
+    assert.deepEqual(asked, [["ur mum"]]);
+    await model(bad);
+    game.tick(host, 20_000); game.tick(host, 26_100); // typed, then the bell
+    assert.equal(state.stage, "vote");
+    assert.deepEqual(answers().sort(), ["honestly no idea", "ur mum"]);
+  }
+});

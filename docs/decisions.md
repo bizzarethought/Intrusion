@@ -29,6 +29,19 @@ Why we made each design choice for our Emory Hacks game, kept in sync with the f
 | 21 | Mini-game pool of 5 for the hackathon, 8 or more later | A full match uses at most 4, so 5 keeps even max-size matches varied; 8 or more later is about double a match so replays feel fresh |
 | 22 | Hackathon five: Red Light Green Light, Pick a Side, Prompt Podium, Glass Bridge Memory, Tile Drop | Each exposes a different bot tell: reaction, decisions, chat, memory, movement; mostly light physics |
 
+## Changed during the build (November 14 and 15)
+
+The table above is the design we set out with. These parts of it changed once we were building and playing it.
+
+| # | What changed | Why |
+| --- | --- | --- |
+| 2 | Players no longer run between arenas. Each round is one mini-game on its own level, opened by a card with the rules, the controls and a count-in | A travel map was a second game to build; the card gives the same breathing space and makes sure everyone knows how to play |
+| 4 | The real-time 3D world became Blender-rendered levels and robot sprites drawn in 2D | The 3D build ran at a low frame rate and lost its graphics context in background tabs; rendering the same models to images keeps the look and runs on any laptop |
+| 10 | The Turing check and the sus meter are gone. A round is mini-game, then vote | In play the meter added nothing to the argument, and a clue the game hands out is weaker than one the players notice themselves |
+| 21, 22 | Four mini-games, not five: Tile Drop was cut. They come in a shuffled rotation shared by every match on the server | Four finished games beat five rough ones; the shared rotation means two short matches in a row see all four |
+| 11 to 14, 16 | Handler mode and the modifiers are not built | Out of time; still the plan for after the hackathon |
+| 17 | The bot copies the room instead of our typing tests: it never chats first, types at about 70 words a minute, and writes its Podium answer after most players have, in their style | A bot that matches the people it is playing with is harder to spot than one tuned to our own habits |
+
 ## Cut or replaced
 
 | Idea | What happened | Why |

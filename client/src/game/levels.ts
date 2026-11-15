@@ -6,20 +6,20 @@
 export const LEVEL_WIDTH = 1920;
 export const LEVEL_HEIGHT = 1080;
 /** Moving "up the screen" covers less of the image than moving sideways, because of the camera tilt. */
-const DEPTH_SQUASH = Math.sin((38 * Math.PI) / 180);
+export const DEPTH_SQUASH = Math.sin((38 * Math.PI) / 180);
 
 export type LevelId = 'oak' | 'rlgl' | 'bridge' | 'podium' | 'side';
 export type Spot = { x: number; y: number };
 
 export type Level = {
   id: LevelId;
-  /** The level's picture: a rendered image, or for Pick a Side one drawn here. */
+  /** The level's picture: the rendered image, or for Pick a Side that image with its banks coloured in. */
   image: HTMLImageElement | HTMLCanvasElement;
   pixelsPerMeter: number;
   /** How tall a robot's body is drawn on this level. */
   botHeight: number;
   spawns: Spot[];
-  /** The things a robot can walk behind, as one transparent image the size of the level. */
+  /** The things a robot can walk behind, as one transparent image the size of the level. Null on levels where nobody walks. */
   foreground: HTMLImageElement | null;
   /** Rectangles of `foreground` to draw in depth order with the robots; `baseY` is where each touches the ground. */
   occluders: Array<{ x: number; y: number; width: number; height: number; baseY: number }>;
@@ -30,6 +30,9 @@ export type Level = {
 };
 export const COLLISION_WIDTH = 480;
 export const COLLISION_HEIGHT = 270;
+
+/** Levels where robots walk about and can go behind a boulder or a rose. On the others (the oak, the podium) everyone stands in place. */
+const WALKED: LevelId[] = ['rlgl', 'bridge', 'side'];
 
 /** Which level each mini-game is played on. Anything else (lobby, votes) uses the oak. */
 export const LEVEL_FOR_GAME: Record<string, LevelId> = {
@@ -221,7 +224,7 @@ type LevelFile = {
   watcher_rose?: { centre_px?: [number, number] };
 };
 const cache = new Map<LevelId, Promise<Level>>();
-/** Browsers were told to keep level files for a week. Change this when the art changes, so they fetch the new files. */
+/** Part of every level file's address. Change it when the art changes, so no browser shows an old copy it kept. */
 const VERSION = '?v=3';
 
 /** An image from the levels folder, or null if it is missing (older art has no foreground or collision map). */
@@ -271,7 +274,7 @@ export function loadLevel(id: LevelId): Promise<Level> {
         fetch(`/assets/levels/${id}.json${VERSION}`).then((response) => response.json() as Promise<LevelFile>),
         // Backgrounds ship as JPEG, a sixth of the size; a PNG straight from the art pass still works.
         picture(`${id}_bg.jpg`).then((jpeg) => jpeg ?? picture(`${id}_bg.png`)),
-        picture(`${id}_fg.png`),
+        WALKED.includes(id) ? picture(`${id}_fg.png`) : null,
         picture(`${id}_collision.png`),
       ]);
       if (!image) throw new Error(`level image ${id} is missing`);
@@ -317,4 +320,4 @@ export const toPixels = (level: Level, x: number, z: number): Spot => ({
   x: LEVEL_WIDTH / 2 + x * level.pixelsPerMeter,
   y: LEVEL_HEIGHT / 2 + z * level.pixelsPerMeter * DEPTH_SQUASH,
 });
-export { DEPTH_SQUASH };
+

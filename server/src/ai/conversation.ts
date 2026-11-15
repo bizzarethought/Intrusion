@@ -1,10 +1,9 @@
 import type { BotContext } from "./client.js";
+import { breaksCharacter, matchStyle, typingMs } from "./style.js";
 
 export type ChatTurn = { name: string; message: string };
 const MAX_MESSAGES = 5;
 const GAP_MS = 4_000;
-/** How long a line takes to type at 70 words a minute, give or take 5 (a word is five characters). */
-const typingMs = (line: string, random: () => number) => (line.length * 12_000) / (65 + random() * 10);
 
 export function addressesBot(message: string, name: string): boolean {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -17,18 +16,6 @@ function fallback(context: BotContext, turn: number): string {
   if (/vote|sus|bot|\bai\b|robot/.test(text) || addressesBot(text, context.botName)) return ["why me lol", "nah not me", "ok but based on what", "thats what the bot would say", "bro i literally fell"][turn % 5];
   if (/\?/.test(text)) return ["idk", "no clue tbh", "couldnt tell you"][turn % 3];
   return ["lol", "maybe", "could be anyone tbh", "hm", "idk who it is"][turn % 5];
-}
-
-/** What a model says when it steps out of the game. Posting it would give the AI away. */
-const BREAKS_CHARACTER = /\b(as an ai|language model|ai assistant|i can(?:'|no)?t (?:help|assist|comply)|i'?m sorry, but)\b/i;
-
-/** Brings a reply down to the room's level: the model leans formal even when told not to. */
-function casual(line: string, context: BotContext): string {
-  const others = context.recentChat.filter((chat) => chat.name !== context.botName).map((chat) => chat.message);
-  // Nobody here starts with a capital or ends with a full stop unless the humans do.
-  if (!others.some((message) => /^[A-Z][a-z]/.test(message))) line = line.toLowerCase();
-  if (!others.some((message) => /[a-z]\.$/i.test(message))) line = line.replace(/\.+$/, "");
-  return line;
 }
 
 /**
@@ -121,8 +108,9 @@ export class BotConversation {
     }
     if (!this.active || generation !== this.generation || controller.signal.aborted) return;
     this.request = undefined;
-    line = casual((line ?? "").replace(/\s+/g, " ").trim().slice(0, 240), context);
-    if (!line || line === this.previous || BREAKS_CHARACTER.test(line)) line = fallback(context, this.sent);
+    const humans = context.recentChat.filter((chat) => chat.name !== context.botName).map((chat) => chat.message);
+    line = matchStyle((line ?? "").replace(/\s+/g, " ").trim().slice(0, 240), humans);
+    if (!line || line === this.previous || breaksCharacter(line)) line = fallback(context, this.sent);
     // It started typing when it started on its answer, so the model's own speed is hidden inside the typing time.
     this.ready = { line, at: startedAt + typingMs(line, this.random) };
   }

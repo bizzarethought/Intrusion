@@ -20,7 +20,8 @@ export function SettingsPanel({ onLeave, onClose }: { onLeave: () => void; onClo
       <ul className="plain">
         <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrow keys to run</li>
         <li>Click or tap the grass to walk there</li>
-        <li><kbd>Tab</kbd> shows the scoreboard</li>
+        <li>On the glass bridge, click a panel to hop onto it</li>
+        <li><kbd>Tab</kbd> shows the scoreboard, <kbd>Enter</kbd> opens chat</li>
       </ul>
       <p className="muted">Animations follow your system's reduced-motion setting.</p>
       <button className="button button--danger" onClick={onLeave}>Leave match</button>

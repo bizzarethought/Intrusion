@@ -2,7 +2,7 @@ import type { SpriteAnimation, SpriteFrame } from '../assets/manifest';
 import { Sprite } from './Sprite';
 
 const BEATS: Array<{ title: string; text: string; variantId: string; animation?: SpriteAnimation; frame?: SpriteFrame }> = [
-  { title: 'Play', text: 'Run to each mini-game and score points.', variantId: 'cobalt', animation: 'walk_side' },
+  { title: 'Play', text: 'Each round is a mini-game. Do well and score points.', variantId: 'cobalt', animation: 'walk_side' },
   { title: 'Watch', text: 'Too perfect? Too clumsy? How someone plays is your evidence.', variantId: 'violet', frame: 'emote_sus' },
   { title: 'Vote', text: 'After each game, argue it out and vote one player out.', variantId: 'crimson', frame: 'emote_angry' },
 ];

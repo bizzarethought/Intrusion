@@ -4,7 +4,7 @@ import { mapBridge, mapLivePlayers, mapSignal, mapState } from './stateMapper';
 import { BACKEND_URL, MAX_CHAT_LENGTH, ROOM_NAME, type ChatLine, type LivePlayer, type Snapshot } from './types';
 
 // The one place that talks to Colyseus. Screens read `Snapshot` through
-// useGameRoom(); the 3D world reads positions through live().
+// useGameRoom(); the game view reads positions through live().
 
 const EMPTY: Snapshot = {
   status: 'idle', error: '', roomId: '', selfId: '', hostId: '',
@@ -67,7 +67,7 @@ function friendly(error: unknown): string {
   if (/not found|invalid/i.test(message)) return 'No room with that code. Check it and try again.';
   if (/already started/i.test(message)) return 'That match has already started.';
   if (/locked|full/i.test(message)) return 'That room is full.';
-  if (/failed to fetch|network|ECONNREFUSED|ws/i.test(message)) return `Can't reach the game server at ${BACKEND_URL}.`;
+  if (/failed to fetch|network|ECONNREFUSED|websocket/i.test(message)) return `Can't reach the game server at ${BACKEND_URL}.`;
   return message || 'Something went wrong while connecting.';
 }
 
@@ -143,7 +143,7 @@ export const subscribe = (listener: () => void) => {
 };
 export const getSnapshot = () => snapshot;
 
-/** Positions and phase straight from the server state, for the 3D world's frame loop. */
+/** Positions and phase straight from the server state, for the game view's frame loop. */
 export function live(): { players: LivePlayer[]; signal: 'green' | 'red' | null; pattern: string; broken: string; stage: string; phase: string; miniGame: string; phaseEndsAt: number; round: number; selfId: string } {
   return {
     players: room ? positions.read(livePlayers, snapshot.selfId, performance.now()) : [],

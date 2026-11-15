@@ -74,7 +74,7 @@ export class FindTheBotRoom extends Room<GameState> {
     playing: () => this.playing(),
     finish: (player) => this.finish(player),
     endIn: (ms) => this.beginPhase("minigame", ms),
-    askAi: (question) => this.aiClient.answer(question),
+    askAi: (prompt, otherAnswers) => this.aiClient.answer(prompt, otherAnswers),
   };
   private phaseTimer?: ReturnType<typeof setTimeout>;
   private tickTimer?: ReturnType<typeof setInterval>;
@@ -157,8 +157,9 @@ export class FindTheBotRoom extends Room<GameState> {
   private everyoneVoted(): boolean {
     return this.playing().every((player) => this.votes.has(player.id));
   }
+  /** Letters and digits of any alphabet, spaces, hyphens and underscores; one line; 24 characters. */
   private sanitizeName(name: string): string {
-    return name.replace(/[^\w -]/g, "").trim().slice(0, 24) || "Player";
+    return name.normalize("NFKC").replace(/[^\p{L}\p{N} _-]/gu, "").replace(/\s+/g, " ").trim().slice(0, 24) || "Player";
   }
 
   // ----------------------------------------------------------------- phases
@@ -196,10 +197,11 @@ export class FindTheBotRoom extends Room<GameState> {
 
   private beginPhase(phase: Phase, durationMs: number): void {
     if (phase !== "voting") this.conversation.stop();
+    const now = Date.now();
     this.state.phase = phase;
-    this.state.phaseEndsAt = Date.now() + durationMs;
+    this.state.phaseEndsAt = now + durationMs;
     // Laptop clocks disagree by seconds; this lets every client count down to the server's time.
-    this.state.clock = Date.now();
+    this.state.clock = now;
     clearTimeout(this.phaseTimer);
     this.phaseTimer = setTimeout(() => this.advancePhase(), durationMs);
   }
@@ -330,7 +332,7 @@ export class FindTheBotRoom extends Room<GameState> {
   private chat(client: Client, message: Record<string, unknown>): void {
     if (this.state.phase === "lobby" || this.state.phase === "loading" || typeof message.message !== "string") return;
     const player = this.state.players.get(this.playerId(client.sessionId));
-    const text = message.message.trim().slice(0, 240);
+    const text = message.message.replace(/\s+/g, " ").trim().slice(0, 240); // one line
     const now = Date.now();
     if (!player || player.eliminated || !text || now - (this.lastChatAt.get(player.id) ?? 0) < CHAT_GAP_MS) return;
     this.lastChatAt.set(player.id, now);
@@ -357,9 +359,9 @@ export class FindTheBotRoom extends Room<GameState> {
     this.conversation.tick(this.state.phaseEndsAt, () => this.botChatContext(bot), line => {
       if (this.state.phase === "voting" && !bot.eliminated) this.say(bot, line);
     });
-    // The AI always votes, so a missing vote can't give it away.
+    // The AI always votes, so a missing vote can't give it away. It votes for someone who is still here.
     if (now >= this.bot.voteAt && !this.votes.has(bot.id)) {
-      const humans = this.all().filter((player) => player.id !== bot.id && !player.eliminated);
+      const humans = this.playing().filter((player) => player.id !== bot.id);
       this.castVote(bot.id, humans.length ? pick(humans).id : null);
     }
   }

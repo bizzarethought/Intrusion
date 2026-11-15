@@ -1,6 +1,5 @@
 import { variantFor } from '../assets/looks';
 import { playGlitch } from '../audio';
-import { PlayerCard } from '../components/PlayerCard';
 import { Sprite } from '../components/Sprite';
 import { leave } from '../protocol/roomClient';
 import type { Player, Snapshot } from '../protocol/types';
@@ -28,7 +27,7 @@ export function RevealScreen({ game }: { game: Snapshot }) {
         <p className="reveal__lead step-1">The AI was…</p>
         {bot ? (
           <div className="reveal__bot step-2">
-            <span className="glitch-frame"><Sprite variantId={variantFor(bot.id, game.selfId)} frame="emote_angry" size={170} /></span>
+            <span className="glitch-frame"><Sprite variantId={variantFor(bot.id, game.selfId)} frame="emote_angry" size={140} /></span>
             <h2>{bot.name}</h2>
           </div>
         ) : (
@@ -42,6 +41,7 @@ export function RevealScreen({ game }: { game: Snapshot }) {
           <ul className="compare step-4" aria-label="The AI against the human average">
             <li><span>Score</span><strong>{bot.score}</strong><em>humans averaged {average(humans, (p) => p.score)}</em></li>
             <li><span>Humans still standing</span><strong>{survivors.length} of {humans.length}</strong><em>{caught ? 'the AI was voted out' : 'the AI never was'}</em></li>
+            {detective && <li><span>Sharpest detective</span><strong>{detective.name}</strong><em>top score among the humans</em></li>}
           </ul>
         )}
         <ul className="whowas step-4" aria-label="Who was who">
@@ -49,20 +49,10 @@ export function RevealScreen({ game }: { game: Snapshot }) {
             <li key={player.id} className={player.isBot ? 'whowas__ai' : ''}><span>{player.name}</span><strong>{player.isBot ? 'the AI' : player.realName || 'Human'}</strong></li>
           ))}
         </ul>
-        {detective && (
-          <ul className="awards step-5">
-            <li className="award">
-              <h3>Sharpest Detective</h3>
-              <PlayerCard player={{ ...detective, eliminated: false }} selfId={game.selfId} size={72} frame="emote_happy" />
-              <small className="muted">Top score among the humans</small>
-            </li>
-          </ul>
-        )}
 
-        <div className="row step-6">
-          <button className="button button--primary button--big" onClick={leave}>Play again</button>
+        <div className="row step-5">
+          <button className="button button--primary button--big" onClick={leave} title="Back to the menu, to create or join a new room">Play again</button>
         </div>
-        <p className="muted step-6">Play again takes you back to the menu to create or join a new room.</p>
       </div>
     </div>
   );

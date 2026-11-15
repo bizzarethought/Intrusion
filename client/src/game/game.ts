@@ -5,7 +5,7 @@ import { Application, Assets, Container, Graphics, Sprite, Texture, Rectangle } 
 import { variantFor } from '../assets/looks';
 import { VARIANTS } from '../assets/manifest';
 import { play } from '../audio';
-import { getSnapshot, live, onCaught, send } from '../protocol/roomClient';
+import { getSnapshot, live, onCaught, send, serverNow } from '../protocol/roomClient';
 import { clearWorldHud, setWorldHud } from '../scene/worldHud';
 import { BRIDGE, DEPTH_SQUASH, LEVEL_FOR_GAME, LEVEL_HEIGHT, LEVEL_WIDTH, RLGL, SIDES, bankAt, loadLevel, onGround, platformAt, toMeters, toPixels, walkable, type Level, type LevelId, type Spot } from './levels';
 import { ANCHOR, BODY_HEIGHT, CELL, botSheet, loadedSheetCount } from './sprites';
@@ -22,6 +22,7 @@ const WALK_SPEED = 1.5; // metres per second
 const SEND_EVERY = 1 / 15; // seconds between movement messages to the server
 const MOSS = '#10190f'; // shown only until the level's picture has loaded
 const HOP = 0.28; // seconds in the air between two stepping stones or glass panels
+const LIT_MS = 7_000; // Glass Bridge: the safe panels light for the last seven seconds of get-ready, once there has been time to read the rules
 /** Centre of a glass panel from its "column:row" name. */
 const panelAt = (key: string): Spot => {
   const [col, row] = key.split(':').map(Number);
@@ -48,10 +49,12 @@ type Bot = {
   shown: Spot;
   /** Height above `shown`, in pixels, while jumping. */
   lift: number;
-  /** The stepping stone or glass panel the robot stands on, the spot its current jump began at, and when. */
+  /** The stepping stone or glass panel the robot stands on, and its current jump: where and when it began, how long it lasts, how high it goes. */
   perch: string;
   hopFrom: Spot;
   hopAt: number;
+  hopTime: number;
+  hopLift: number;
 };
 
 /**
@@ -147,6 +150,8 @@ export async function createGame(canvas: HTMLCanvasElement) {
   /** Rings that spread from a panel or a stepping stone as a robot steps onto it. */
   let ripples: Array<{ x: number; y: number; from: number }> = [];
   let knownBroken = '';
+  /** Glass Bridge: the panels that have given way, as "column:row" names. Read from the server once a frame. */
+  let gone: string[] = [];
   let drawnLevel: Level | undefined;
   let backgroundTexture: Texture | undefined;
   const profiler = frameProfiler();
@@ -283,25 +288,22 @@ export async function createGame(canvas: HTMLCanvasElement) {
         else if (code === 'KeyS' || code === 'ArrowDown') row = 0;
         else if (last && (code === 'KeyD' || code === 'ArrowRight')) row = 0;
       }
-      if (row !== undefined && !last && state.broken.split(',').includes(`${nextColumn}:${row}`)) { result = 'That panel is gone.'; resultUntil = time + 2; }
+      if (row !== undefined && !last && gone.includes(`${nextColumn}:${row}`)) { result = 'That panel is gone.'; resultUntil = time + 2; }
       else if (row !== undefined) send.hop(nextColumn, row);
     }
 
     if (state.signal && state.signal !== lastSignal) play(state.signal === 'green' ? 'go' : 'stop');
     lastSignal = state.signal;
+    // One line of guidance while playing. Before that the get-ready card has the rules, and at the podium the answer panel says what to do.
     let objective = '';
-    if (bot.eliminated) objective = 'You were voted out. You can still watch.';
-    else if (level.id === 'podium') objective = ''; // the answer panel says what to do
-    else if (level.id === 'side') {
-      objective = !playing ? 'Read the question. The red bank is one answer, the blue bank is the other.'
-        : state.stage === 'choose' ? 'Hop across the stones to the red bank or the blue bank before time runs out.' : 'Choices are locked in.';
-    } else if (bridge) {
-      objective = !playing ? 'Memorise the lit panels. When they go dark, click a panel to hop onto it.'
-        : me.finished ? 'You crossed. Watch who remembers, and who guesses.'
+    if (!playing || level.id === 'podium') objective = '';
+    else if (bot.eliminated) objective = 'You were voted out. You can still watch.';
+    else if (level.id === 'side') objective = state.stage === 'choose' ? 'Hop across the stones to the red bank or the blue bank before time runs out.' : 'Choices are locked in.';
+    else if (bridge) {
+      objective = me.finished ? 'You crossed. Watch who remembers, and who guesses.'
         : nextColumn > 6 ? 'Last hop: click the far bank, or press D.'
         : 'Click a panel in the next column to hop onto it. Keys: W for the far panel, S for the near one.';
-    } else if (!playing) objective = 'Get ready. Run when the rose opens.';
-    else if (me.finished) objective = 'You made it. Watch who else does, and how.';
+    } else if (me.finished) objective = 'You made it. Watch who else does, and how.';
     else if (local.x <= RLGL.startX) objective = 'Cross the roses and run for the far side.';
     else objective = state.signal === 'red' ? 'Freeze! The rose is watching.' : 'Go! The rose is open.';
 
@@ -315,7 +317,7 @@ export async function createGame(canvas: HTMLCanvasElement) {
       sendTimer = 0;
     }
     if (time > resultUntil) result = '';
-    // Pick a Side: which platform we are on, by the same line the server counts with.
+    // Pick a Side: which bank we are on, by the same lines the server counts with.
     const side = level.id !== 'side' || bot.eliminated ? '' : bankAt(local.x, local.y);
     mySide = side;
     setWorldHud({ objective, signal: playing ? state.signal : null, result, side });
@@ -333,7 +335,6 @@ export async function createGame(canvas: HTMLCanvasElement) {
     }
     const { body, label } = visual;
     const size = (CELL * level.botHeight) / BODY_HEIGHT;
-    // The sprites carry their own soft shadow; a second, fixed one looked wrong over water.
     const sheet = botSheet(bot.look);
     // Nothing is drawn until the robot's sheet has loaded: no placeholder shape.
     body.visible = Boolean(sheet);
@@ -365,7 +366,7 @@ export async function createGame(canvas: HTMLCanvasElement) {
       setBotScale(body, size, sheet.cell, bot.flip && bot.facing === 'side' && !bot.eliminated && !emoting);
       if (idle) body.scale.y *= 1 + Math.sin(clock * 2.4) * 0.012;
       // A slight squash as it lands from a jump.
-      const landed = (time - bot.hopAt - HOP) / 0.14;
+      const landed = (time - bot.hopAt - bot.hopTime) / 0.14;
       if (landed >= 0 && landed < 1) body.scale.y *= 0.9 + 0.1 * landed;
       body.position.set(bot.shown.x, bot.shown.y - bot.lift);
       body.zIndex = bot.shown.y;
@@ -397,6 +398,7 @@ export async function createGame(canvas: HTMLCanvasElement) {
     time += dt;
 
     const state = live();
+    gone = state.broken ? state.broken.split(',') : [];
     const moving = scene === 'play' && (state.phase === 'travel' || state.phase === 'minigame');
     const levelId: LevelId = moving ? LEVEL_FOR_GAME[state.miniGame] ?? 'oak' : 'oak';
     const level = getLevel(levelId);
@@ -425,7 +427,7 @@ export async function createGame(canvas: HTMLCanvasElement) {
     roster.forEach((player, index) => {
       let bot = bots.get(player.id);
       if (!bot) {
-        bot = { look: player.look, name: player.name, x: 0, y: 0, facing: 'front', flip: false, moving: false, movingUntil: 0, eliminated: false, isSelf: false, placed: false, emote: '', emoteUntil: 0, offset: index * 1.37, shown: { x: 0, y: 0 }, lift: 0, perch: '', hopFrom: { x: 0, y: 0 }, hopAt: -Infinity };
+        bot = { look: player.look, name: player.name, x: 0, y: 0, facing: 'front', flip: false, moving: false, movingUntil: 0, eliminated: false, isSelf: false, placed: false, emote: '', emoteUntil: 0, offset: index * 1.37, shown: { x: 0, y: 0 }, lift: 0, perch: '', hopFrom: { x: 0, y: 0 }, hopAt: -Infinity, hopTime: HOP, hopLift: 44 };
         bots.set(player.id, bot);
       }
       bot.look = player.look;
@@ -442,16 +444,11 @@ export async function createGame(canvas: HTMLCanvasElement) {
         target = local;
       } else target = toPixels(level, player.x, player.z);
 
-      const fromX = bot.x;
-      const fromY = bot.y;
-      if (fresh || !bot.placed || bot.isSelf) { bot.x = target.x; bot.y = target.y; }
-      else {
-        // Remote targets already come from the network interpolation buffer.
-        bot.x = target.x;
-        bot.y = target.y;
-      }
-      const stepX = bot.x - fromX;
-      const stepY = bot.y - fromY;
+      // Other players' targets already come smoothed, from the network interpolation buffer.
+      const stepX = target.x - bot.x;
+      const stepY = target.y - bot.y;
+      bot.x = target.x;
+      bot.y = target.y;
       if (!fresh && bot.placed && Math.hypot(stepX, stepY) / Math.max(dt, 0.001) > 25) bot.movingUntil = time + 0.12;
       bot.moving = time < bot.movingUntil;
       if (bot.moving) {
@@ -473,18 +470,24 @@ export async function createGame(canvas: HTMLCanvasElement) {
         perch = String(stone[0]);
       }
       if (perch !== bot.perch) {
-        // A jump, unless it is too far to be one (sent back to the bank after a fall).
-        if (!fresh && bot.placed && Math.hypot(rest.x - bot.shown.x, rest.y - bot.shown.y) < 300) {
+        const distance = Math.hypot(rest.x - bot.shown.x, rest.y - bot.shown.y);
+        // No jump when a glass panel gave way: the player is simply back on the bank they started from.
+        const fell = level.id === 'bridge' && !perch && rest.x < BRIDGE.left;
+        if (!fresh && bot.placed && !fell && distance < 600) {
+          // A long leap (off the bridge onto the far bank) takes a little longer and goes a little higher.
+          const reach = Math.min(2.2, Math.max(1, distance / 220));
           bot.hopFrom = { ...bot.shown };
           bot.hopAt = time;
-          if (perch) ripples.push({ x: rest.x, y: rest.y, from: time + HOP }); // the footing takes the weight as it lands
+          bot.hopTime = HOP * reach;
+          bot.hopLift = 44 * Math.sqrt(reach);
+          if (perch) ripples.push({ x: rest.x, y: rest.y, from: time + bot.hopTime }); // the footing takes the weight as it lands
         } else bot.hopAt = -Infinity;
         bot.perch = perch;
       }
-      const air = (time - bot.hopAt) / HOP; // 0 at take-off, 1 on landing
+      const air = (time - bot.hopAt) / bot.hopTime; // 0 at take-off, 1 on landing
       if (air < 1) {
         bot.shown = { x: bot.hopFrom.x + (rest.x - bot.hopFrom.x) * air, y: bot.hopFrom.y + (rest.y - bot.hopFrom.y) * air };
-        bot.lift = Math.sin(air * Math.PI) * 44;
+        bot.lift = Math.sin(air * Math.PI) * bot.hopLift;
         bot.moving = true; bot.facing = 'side'; bot.flip = rest.x < bot.hopFrom.x;
       } else {
         bot.shown = { x: rest.x, y: rest.y };
@@ -513,10 +516,10 @@ export async function createGame(canvas: HTMLCanvasElement) {
       background.texture = backgroundTexture;
       background.width = LEVEL_WIDTH; background.height = LEVEL_HEIGHT;
       // Boulders and big roses are cut out of the foreground layer and sorted with the robots, so a
-      // robot can stand behind one. Not where nobody walks: the oak, and the podium boulders robots stand on.
+      // robot can stand behind one. (Levels where nobody walks behind anything come without that layer.)
       for (const sprite of occluders) sprite.destroy({ texture: true });
       foregroundTexture?.destroy(true);
-      foregroundTexture = level.foreground && level.id !== 'oak' && level.id !== 'podium' ? Texture.from(level.foreground) : undefined;
+      foregroundTexture = level.foreground ? Texture.from(level.foreground) : undefined;
       occluders = !foregroundTexture ? [] : level.occluders.map((box) => {
         const sprite = new Sprite(new Texture({ source: foregroundTexture!.source, frame: new Rectangle(box.x, box.y, box.width, box.height) }));
         sprite.position.set(box.x, box.y);
@@ -529,8 +532,8 @@ export async function createGame(canvas: HTMLCanvasElement) {
     // A panel that just gave way: it tilts, sinks and fades, and leaves a splash.
     if (onBridge && state.broken !== knownBroken) {
       const before = knownBroken.split(',');
-      for (const key of state.broken.split(',')) {
-        if (!key || before.includes(key)) continue;
+      for (const key of gone) {
+        if (before.includes(key)) continue;
         const { x, y } = panelAt(key);
         const cracked = new Sprite(art.cracked); cracked.anchor.set(0.5); cracked.position.set(x, y);
         const splash = new Sprite(); splash.anchor.set(0.5); splash.position.set(x, y); splash.scale.set(1.6);
@@ -549,17 +552,17 @@ export async function createGame(canvas: HTMLCanvasElement) {
       else { sprite.y = y + age * 70; sprite.alpha = Math.max(0, 1 - age / 0.4); }
       return !done;
     });
-    // While players memorise: the safe panel in each column lights up.
+    // The safe panel in each column lights up for the last seconds of get-ready, to be memorised.
+    const lightsOn = onBridge && state.phase === 'travel' && state.phaseEndsAt - serverNow() <= LIT_MS;
     lit.forEach((sprite, col) => {
-      const row = onBridge ? state.pattern[col] : undefined;
+      const row = lightsOn ? state.pattern[col] : undefined;
       sprite.visible = row !== undefined;
       if (row !== undefined) { sprite.position.copyFrom(panelAt(`${col}:${row}`)); sprite.alpha = 0.7 + Math.sin(time * 6) * 0.3; }
     });
     ripples = ripples.filter((ripple) => time - ripple.from < 0.7);
     platforms.clear();
     // Panels that have given way: the background still shows them, so open water is drawn over where the glass was.
-    if (onBridge) for (const key of state.broken.split(',')) {
-      if (!key) continue;
+    if (onBridge) for (const key of gone) {
       const { x, y } = panelAt(key);
       platforms.roundRect(x - BRIDGE.panelWidth / 2 - 6, y - BRIDGE.panelHeight / 2 - 6, BRIDGE.panelWidth + 12, BRIDGE.panelHeight + 14, 6).fill(0x2f7090);
     }
@@ -584,7 +587,7 @@ export async function createGame(canvas: HTMLCanvasElement) {
       const glow = { width: 5, color: 0xffffff, alpha: 0.55 + Math.sin(time * 5) * 0.3 };
       if (nextColumn > 6) platforms.ellipse(BRIDGE.right + 100, BRIDGE.rowSplit, 70, 70 * DEPTH_SQUASH).stroke(glow);
       else for (const row of [0, 1]) {
-        if (state.broken.split(',').includes(`${nextColumn}:${row}`)) continue;
+        if (gone.includes(`${nextColumn}:${row}`)) continue;
         const { x, y } = panelAt(`${nextColumn}:${row}`);
         platforms.roundRect(x - BRIDGE.panelWidth / 2, y - BRIDGE.panelHeight / 2, BRIDGE.panelWidth, BRIDGE.panelHeight, 8).stroke(glow);
       }

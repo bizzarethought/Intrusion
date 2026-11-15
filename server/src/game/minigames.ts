@@ -1,3 +1,4 @@
+import { breaksCharacter, matchStyle, typingMs } from "../ai/style.js";
 import { RLGL_FIELD } from "./rules.js";
 import { shuffled } from "./identities.js";
 import type { GameState, PlayerState } from "./schema.js";
@@ -5,7 +6,7 @@ import type { GameState, PlayerState } from "./schema.js";
 // The mini-games. Each one is a small object the room drives: it places the
 // players, decides what a move means, plays the AI's part ten times a second,
 // and hands out any end-of-round points. The AI goes through the same `move`
-// as everyone else, so the same rules catch it.
+// and `hop` as everyone else, so the same rules catch it.
 //
 // Positions are metres from the middle of the level (x across, z toward the
 // camera). The numbers mirror the pixel positions in client/src/game/levels.ts.
@@ -21,12 +22,12 @@ export type Host = {
   finish(player: PlayerState): void;
   /** Ends the mini-game phase this many milliseconds from now. */
   endIn(ms: number): void;
-  /** One short line from the language model, or null when it is unavailable. */
-  askAi(question: string): Promise<string | null>;
+  /** An answer to a Prompt Podium prompt from the language model, written to fit in with the other players' answers. Null when there is no model. */
+  askAi(prompt: string, otherAnswers: string[]): Promise<string | null>;
 };
 
 export interface MiniGame {
-  /** How long players get to read the rules before it starts. */
+  /** How long players get to read the rules before it starts. The last three seconds are the count-in. */
   readonly readyMs: number;
   readonly durationMs: number;
   /** The round is announced: place the players and publish anything they need to read. */
@@ -46,6 +47,9 @@ export interface MiniGame {
 const between = (min: number, max: number) => min + Math.random() * (max - min);
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 const pick = <T>(list: readonly T[]): T => list[Math.floor(Math.random() * list.length)];
+/** Turns a spot measured on a level's picture (pixels, 1920 by 1080, seen from 38 degrees) into metres from its middle. */
+const fromPixels = (pixelsPerMeter: number) => ([px, py]: number[]) =>
+  ({ x: (px - 960) / pixelsPerMeter, z: (py - 540) / (pixelsPerMeter * Math.sin((38 * Math.PI) / 180)) });
 
 /** Walks a player one AI step (a tenth of a second) toward a point. Returns what `move` returned. */
 function stepToward(game: MiniGame, host: Host, bot: PlayerState, x: number, z: number, speed: number, now: number): boolean {
@@ -72,7 +76,7 @@ const RED_GRACE_MS = 400; // reaction time allowed after the light turns red
 
 /** Run from the left roses to the right ones. Move while the rose watches and you go back. */
 class RedLightGreenLight implements MiniGame {
-  readonly readyMs = 5_000; // the rules, then a three-second count-in
+  readonly readyMs = 8_000;
   readonly durationMs = 60_000;
   private signalSince = 0;
   private flipAt = Infinity;
@@ -101,7 +105,8 @@ class RedLightGreenLight implements MiniGame {
 
   move(host: Host, player: PlayerState, x: number, z: number, now: number): boolean {
     const field = RLGL_FIELD;
-    // shortcut: only the picture's edges are enforced here, not the pond or the rose; add shapes when collision art exists
+    // shortcut: only the picture's edges are enforced here. Each player's own screen keeps them off the pond and the
+    // boulders (it has the level's collision map); check that here too if cheating ever matters.
     x = clamp(x, field.minX, field.maxX);
     z = clamp(z, field.minZ, field.maxZ);
     const onField = player.x > field.startX && player.x < field.finishX && !player.finished;
@@ -150,6 +155,9 @@ export const BRIDGE = {
   bankBottom: 0.35,
 };
 const HOP_MS = 250; // one hop at a time: the next is refused until this one has landed
+/** Where players stand once across, in the order they arrive: open grass on the far bank, nearest the bridge first. */
+const FAR_BANK = [[1600, 680], [1720, 690], [1660, 780], [1840, 680], [1780, 780], [1600, 880], [1720, 880], [1870, 770], [1840, 880], [1660, 970], [1780, 970]]
+  .map(fromPixels(290.91));
 
 /**
  * A safe row (0 or 1) for each column, as a string. Each column is a coin flip, but a path that
@@ -171,10 +179,11 @@ export function bridgePattern(random: () => number = Math.random): string {
  * back on the bank. Nobody walks here, so there is no edge of a panel to slip over.
  */
 class GlassBridgeMemory implements MiniGame {
-  readonly readyMs = 7_000; // long enough to memorise seven panels
+  readonly readyMs = 12_000; // five seconds to read the rules, then the panels light for seven (the screens time that)
   readonly durationMs = 60_000;
   private pattern = "";
   private readonly broken = new Set<string>();
+  private across = 0;
   /** Each player's column (-1 on the left bank, 7 once across), last hop, and place on the bank. */
   private readonly at = new Map<string, { col: number; hopAt: number; x: number; z: number }>();
   /** What the AI believes the safe row is for each column: mostly right, sometimes not. */
@@ -183,7 +192,7 @@ class GlassBridgeMemory implements MiniGame {
 
   setup(host: Host, lineup: PlayerState[]): void {
     this.pattern = bridgePattern();
-    host.state.pattern = this.pattern; // shown while players get ready...
+    host.state.pattern = this.pattern; // lit while players get ready...
     host.state.broken = "";
     lineUp(lineup, BRIDGE.spawnX, BRIDGE.bankTop, BRIDGE.bankBottom);
     for (const player of lineup) this.at.set(player.id, { col: -1, hopAt: 0, x: player.x, z: player.z });
@@ -206,9 +215,7 @@ class GlassBridgeMemory implements MiniGame {
     spot.hopAt = now;
     spot.col = col;
     if (col >= BRIDGE.columns) {
-      // Across: onto the far bank, opposite where they started.
-      player.x = BRIDGE.finishX + 0.35 + (BRIDGE.spawnX - spot.x);
-      player.z = spot.z;
+      Object.assign(player, FAR_BANK[Math.min(this.across++, FAR_BANK.length - 1)]);
       host.finish(player);
       return true;
     }
@@ -295,7 +302,7 @@ export function sidePoints(side: "A" | "B" | "", a: number, b: number): number {
 
 /** A would-you-rather: cross to the bank you choose before time runs out. */
 class PickASide implements MiniGame {
-  readonly readyMs = 6_000; // time to read the question
+  readonly readyMs = 10_000; // the rules, the question and both answers
   readonly durationMs = 24_000;
   private decideAt = 0;
   /** The AI's choice, when it sets off, and how far across its bank's resting place it will stop (0 to 1 each way). */
@@ -367,9 +374,9 @@ class PickASide implements MiniGame {
 
 // --------------------------------------------------------------- Prompt Podium
 
-/** The ten boulders, as pixels on the podium level (266.67 px per metre, 38 degree camera). */
+/** The ten boulders on the podium level. */
 const PODIUM_SPOTS = [[208, 332], [316, 437], [462, 397], [638, 444], [833, 548], [1034, 524], [1229, 521], [1405, 426], [1551, 407], [1658, 271]]
-  .map(([px, py]) => ({ x: (px - 960) / 266.67, z: (py - 540) / (266.67 * Math.sin((38 * Math.PI) / 180)) }));
+  .map(fromPixels(266.67));
 const PODIUM_PROMPTS = [
   "The worst thing to say on a first date",
   "A terrible name for a pet goldfish",
@@ -387,6 +394,8 @@ const ANSWER_MS = 25_000;
 const VOTE_MS = 15_000;
 const RESULTS_MS = 6_000;
 const ANSWER_LENGTH = 80;
+/** The AI holds its answer back until this share of the other players has answered, so it can write the way they do. */
+const AI_WAITS_FOR = 0.6;
 
 export type PodiumEntry = { key: number; text: string; playerId?: string; votes?: number };
 
@@ -400,14 +409,15 @@ export function podiumResults(answers: Map<string, string>, keys: Map<string, nu
 
 /** Everyone types an answer to a prompt, then votes for the funniest one that is not their own. */
 class PromptPodium implements MiniGame {
-  readonly readyMs = 5_000; // the rules, then a three-second count-in
+  readonly readyMs = 9_000; // the rules and the prompt, with time to start thinking
   readonly durationMs = ANSWER_MS + VOTE_MS + RESULTS_MS;
   private stageEndsAt = 0;
   private readonly answers = new Map<string, string>();
   private readonly keys = new Map<string, number>();
   private readonly picks = new Map<string, number>();
-  private aiAnswer = "";
-  private aiActsAt = Infinity;
+  /** The AI's answer: when it stops waiting for the others, when it asked, how long it "thinks", the line, and when it will have typed it. */
+  private readonly ai = { askBy: Infinity, askedAt: 0, think: 0, line: "", sendAt: Infinity };
+  private aiPicksAt = Infinity;
 
   setup(host: Host, lineup: PlayerState[]): void {
     host.state.prompt = pick(PODIUM_PROMPTS);
@@ -418,14 +428,24 @@ class PromptPodium implements MiniGame {
     lineup.forEach((player, i) => Object.assign(player, PODIUM_SPOTS[Math.min(PODIUM_SPOTS.length - 1, Math.round(i * step))]));
   }
 
-  begin(host: Host, now: number): void {
+  begin(_host: Host, now: number): void {
     this.stageEndsAt = now + ANSWER_MS;
-    // The AI "types" for a human sort of time, whatever the model's own speed.
-    this.aiActsAt = now + between(5_000, 14_000);
-    this.aiAnswer = pick(PODIUM_FALLBACKS);
-    host.askAi(`Party game prompt: "${host.state.prompt}". Reply with one short, funny answer a casual player would type. Lowercase, under 10 words, no quotes.`)
-      .then((line) => { if (line) this.aiAnswer = line; })
-      .catch(() => {}); // keep the fallback
+    this.ai.askBy = now + between(10_000, 13_000); // if the others are slow, it stops waiting: it still has to type
+  }
+
+  /** Asks the model for an answer in the style of the ones already in. A stock line stands in if the model fails or steps out of the game. */
+  private askAi(host: Host, others: string[], now: number): void {
+    this.ai.askedAt = now;
+    this.ai.think = between(1_200, 3_000); // a moment to come up with it
+    const stock = pick(PODIUM_FALLBACKS);
+    host.askAi(host.state.prompt, others)
+      .catch(() => null)
+      .then((line) => {
+        // One line, with no quotes round it, written the way the others write.
+        const answer = matchStyle((line ?? "").replace(/\s+/g, " ").trim().replace(/^["'\u201c\u2018]+|["'\u201d\u2019]+$/g, ""), others).slice(0, ANSWER_LENGTH).trim();
+        const copied = others.some((other) => other.toLowerCase() === answer.toLowerCase());
+        this.ai.line = answer && !copied && !breaksCharacter(answer) ? answer : stock;
+      });
   }
 
   move(): boolean {
@@ -436,16 +456,24 @@ class PromptPodium implements MiniGame {
     const players = host.playing();
     const bot = host.bot();
     if (host.state.stage === "answer") {
-      if (bot && now >= this.aiActsAt && !this.answers.has(bot.id)) this.answers.set(bot.id, this.aiAnswer.slice(0, ANSWER_LENGTH));
+      if (bot && !this.answers.has(bot.id)) {
+        // The AI answers after most of the others, in their style, and at a typist's speed.
+        const others = players.filter((player) => player !== bot).flatMap((player) => this.answers.get(player.id) ?? []);
+        const enough = others.length >= Math.ceil((players.length - 1) * AI_WAITS_FOR);
+        if (!this.ai.askedAt && (enough || now >= this.ai.askBy)) this.askAi(host, others, now);
+        // Like anyone racing the clock, it gets its answer in just before time is up at the latest.
+        if (this.ai.line && this.ai.sendAt === Infinity) this.ai.sendAt = Math.min(this.stageEndsAt - 500, Math.max(now, this.ai.askedAt + this.ai.think + typingMs(this.ai.line)));
+        if (now >= this.ai.sendAt) this.answers.set(bot.id, this.ai.line);
+      }
       if (now < this.stageEndsAt && !players.every((player) => this.answers.has(player.id))) return;
       // Answers go up shuffled and unsigned.
       shuffled([...this.answers.keys()]).forEach((playerId, key) => this.keys.set(playerId, key));
       host.state.board = JSON.stringify([...this.answers].map(([playerId, text]) => ({ key: this.keys.get(playerId), text })).sort((a, b) => (a.key ?? 0) - (b.key ?? 0)));
       host.state.stage = "vote";
       this.stageEndsAt = now + VOTE_MS;
-      this.aiActsAt = now + between(3_000, 9_000);
+      this.aiPicksAt = now + between(3_000, 9_000);
     } else if (host.state.stage === "vote") {
-      if (bot && now >= this.aiActsAt && !this.picks.has(bot.id)) {
+      if (bot && now >= this.aiPicksAt && !this.picks.has(bot.id)) {
         const others = [...this.keys].filter(([playerId]) => playerId !== bot.id).map(([, key]) => key);
         if (others.length) this.picks.set(bot.id, pick(others));
         else this.picks.set(bot.id, -1);

@@ -9,11 +9,12 @@ SSH="ssh -i $KEY -o StrictHostKeyChecking=accept-new"
 REMOTE="ubuntu@$HOST"
 
 # Frontend: built to talk to the game server over secure WebSockets.
-(cd client && npm install --no-audit --no-fund && VITE_BACKEND_URL=wss://server.play-intrusion.us npm run build)
+# (--no-save: install what the lock file says without rewriting it; npm otherwise reshuffles its optional entries on every run.)
+(cd client && npm install --no-save --no-audit --no-fund && VITE_BACKEND_URL=wss://server.play-intrusion.us npm run build)
 rsync -az --delete -e "$SSH" client/dist/ "$REMOTE:/var/www/intrusion/"
 
 # Game server: compiled JavaScript plus its package list; dependencies install on the server.
-(cd server && npm install --no-audit --no-fund && npm test && npm run build)
+(cd server && npm install --no-save --no-audit --no-fund && npm test && npm run build)
 rsync -az --delete -e "$SSH" server/dist server/package.json server/package-lock.json "$REMOTE:/opt/intrusion/"
 # The AI key travels in .env, straight to the server, never through git. A fixed MINI_GAMES order is
 # for testing on a laptop, so it stays behind: the live game always shuffles.
