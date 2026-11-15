@@ -26,6 +26,9 @@ export class AiClient {
         model: config.ai.model,
         temperature: 0.8,
         max_tokens: 60,
+        // Qwen "thinks" before answering by default, which spends the whole token budget and
+        // returns an empty reply. One chat line needs no thinking, and without it replies take about a second.
+        chat_template_kwargs: { enable_thinking: false },
         messages: [
           {
             role: "system",
