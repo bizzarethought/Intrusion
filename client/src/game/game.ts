@@ -1,13 +1,13 @@
 import { setBotScale } from './botTransform';
 import { createFx } from './fx';
 import { frameProfiler } from './performance';
-import { Application, Container, Sprite, Texture, Rectangle } from 'pixi.js';
+import { Application, Container, Graphics, Sprite, Texture, Rectangle } from 'pixi.js';
 import { variantFor } from '../assets/looks';
-import { VARIANTS, variant } from '../assets/manifest';
+import { VARIANTS } from '../assets/manifest';
 import { play } from '../audio';
 import { live, onCaught, send } from '../protocol/roomClient';
 import { clearWorldHud, setWorldHud } from '../scene/worldHud';
-import { DEPTH_SQUASH, LEVEL_FOR_GAME, LEVEL_HEIGHT, LEVEL_WIDTH, RLGL, loadLevel, toMeters, toPixels, walkable, type Level, type LevelId, type Spot } from './levels';
+import { BRIDGE, DEPTH_SQUASH, LEVEL_FOR_GAME, LEVEL_HEIGHT, LEVEL_WIDTH, RLGL, loadLevel, platformAt, toMeters, toPixels, walkable, type Level, type LevelId, type Spot } from './levels';
 import { ANCHOR, BODY_HEIGHT, CELL, botSheet, loadedSheetCount } from './sprites';
 
 // The game view: a batched GPU scene with a pre-rendered level and robot sprites
@@ -21,6 +21,7 @@ export type GameScene = 'attract' | 'lobby' | 'play';
 const WALK_SPEED = 1.5; // metres per second
 const SEND_EVERY = 1 / 15; // seconds between movement messages to the server
 const MOSS = '#10190f'; // letterbox colour around the level
+const HOP = 0.26; // seconds a robot is in the air when it steps onto a platform
 
 type Bot = {
   look: string;
@@ -30,12 +31,17 @@ type Bot = {
   facing: 'side' | 'front' | 'back';
   flip: boolean; // side frames face right; flip them to face left
   moving: boolean;
+  /** Keeps the walk animation on through tiny gaps in movement, so it doesn't flicker to idle. */
+  movingUntil: number;
   eliminated: boolean;
   isSelf: boolean;
   placed: boolean;
   emote: string;
   emoteUntil: number;
   offset: number; // so robots don't animate in unison
+  /** The glass panel or stepping stone the robot is on, and when its hop onto it lands. */
+  platform: string;
+  landsAt: number;
 };
 
 export async function createGame(canvas: HTMLCanvasElement) {
@@ -48,21 +54,17 @@ export async function createGame(canvas: HTMLCanvasElement) {
   const wash = new Sprite(Texture.WHITE);
   wash.tint = 0x960010;
   wash.width = LEVEL_WIDTH; wash.height = LEVEL_HEIGHT;
-  world.addChild(background, actors, labels, wash);
+  // Drawn over the level and under the robots: lit and broken bridge panels, and landing ripples.
+  const platforms = new Graphics();
+  world.addChild(background, platforms, actors, labels, wash);
   app.stage.addChild(world);
   const fx = createFx();
   if (new URLSearchParams(location.search).has('perf')) Object.assign(window, { intrusionFx: fx.stats });
   world.addChildAt(fx.ground, 1);
   world.addChildAt(fx.foreground, world.getChildIndex(labels));
-  const visuals = new Map<Bot, { body: Sprite; shadow: Sprite; label: Sprite; labelKey: string }>();
+  const visuals = new Map<Bot, { body: Sprite; label: Sprite; labelKey: string }>();
   const textures = new WeakMap<object, Map<string, Texture>>();
   let depthOrder = '';
-  const shadowCanvas = document.createElement('canvas');
-  shadowCanvas.width = 128; shadowCanvas.height = 48;
-  const shadowCtx = shadowCanvas.getContext('2d')!;
-  shadowCtx.fillStyle = 'rgba(0,0,0,0.34)';
-  shadowCtx.beginPath(); shadowCtx.ellipse(64, 24, 64, 24, 0, 0, Math.PI * 2); shadowCtx.fill();
-  const shadowTexture = Texture.from(shadowCanvas);
   const ringCanvas = document.createElement('canvas');
   ringCanvas.width = 130; ringCanvas.height = 54;
   const ringCtx = ringCanvas.getContext('2d')!;
@@ -70,6 +72,9 @@ export async function createGame(canvas: HTMLCanvasElement) {
   ringCtx.beginPath(); ringCtx.ellipse(65, 27, 62, 24, 0, 0, Math.PI * 2); ringCtx.stroke();
   const ring = new Sprite(Texture.from(ringCanvas)); ring.anchor.set(0.5);
   world.addChildAt(ring, 1);
+  /** Rings that spread from a platform when a robot lands on it, or from a panel when it breaks. */
+  let ripples: Array<{ x: number; y: number; from: number; big: boolean }> = [];
+  let knownBroken = '';
   let drawnLevel: Level | undefined;
   let backgroundTexture: Texture | undefined;
   const profiler = frameProfiler();
@@ -136,14 +141,16 @@ export async function createGame(canvas: HTMLCanvasElement) {
   /** Moves the local player. The server decides the light, who is caught and who has finished. */
   function stepSelf(dt: number, state: ReturnType<typeof live>, level: Level, bot: Bot, me: { x: number; z: number; finished: boolean }) {
     const playing = state.phase === 'minigame';
-    canWalk = playing && !bot.eliminated;
+    const bridge = level.id === 'bridge';
+    // Nobody walks in Prompt Podium, and Pick a Side locks once the choices are counted.
+    canWalk = playing && !bot.eliminated && level.id !== 'podium' && !(level.id === 'side' && state.stage !== 'choose');
     const server = toPixels(level, me.x, me.z);
     if (wasCaught) {
-      // The rose saw us move: the server has put us back behind the start line.
+      // The server has put us back at the start: the rose saw us move, or a glass panel gave way.
       wasCaught = false;
       Object.assign(local, server);
       walkTarget = null;
-      result = 'The rose saw you move. Back to the start.';
+      result = bridge ? 'That panel was not safe. Back to the bank.' : 'The rose saw you move. Back to the start.';
       resultUntil = time + 3;
       bot.emote = 'emote_angry';
       bot.emoteUntil = time + 1.5;
@@ -152,7 +159,7 @@ export async function createGame(canvas: HTMLCanvasElement) {
       Object.assign(local, server); // we drifted from where the server has us (it limits speed and edges)
     }
     if (me.finished && !sawFinish) {
-      result = 'Across the line!';
+      result = bridge ? 'You made it across!' : 'Across the line!';
       resultUntil = time + 4;
       bot.emote = 'emote_happy';
       bot.emoteUntil = time + 2.5;
@@ -185,7 +192,14 @@ export async function createGame(canvas: HTMLCanvasElement) {
     lastSignal = state.signal;
     let objective = '';
     if (bot.eliminated) objective = 'You were voted out. You can still watch.';
-    else if (!playing) objective = 'Get ready. Run when the rose opens.';
+    else if (level.id === 'podium') objective = ''; // the answer panel says what to do
+    else if (level.id === 'side') {
+      objective = !playing ? 'Read the question. Roses are on the left, boulders on the right.'
+        : state.stage === 'choose' ? 'Walk to the bank you choose before time runs out.' : 'Choices are locked in.';
+    } else if (bridge) {
+      objective = !playing ? 'Memorise the lit panels. They go dark when you start.'
+        : me.finished ? 'You crossed. Watch who remembers, and who guesses.' : 'Cross on the panels that were lit.';
+    } else if (!playing) objective = 'Get ready. Run when the rose opens.';
     else if (me.finished) objective = 'You made it. Watch who else does, and how.';
     else if (local.x <= RLGL.startX) objective = 'Cross the roses and run for the far side.';
     else objective = state.signal === 'red' ? 'Freeze! The rose is watching.' : 'Go! The rose is open.';
@@ -206,19 +220,20 @@ export async function createGame(canvas: HTMLCanvasElement) {
   function drawBot(bot: Bot, level: Level) {
     let visual = visuals.get(bot);
     if (!visual) {
-      const body = new Sprite(Texture.WHITE);
-      const shadow = new Sprite(shadowTexture);
+      const body = new Sprite();
       const label = new Sprite();
-      body.anchor.set(ANCHOR.x, ANCHOR.y); shadow.anchor.set(0.5); label.anchor.set(0.5, 1);
-      visual = { body, shadow, label, labelKey: '' };
+      body.anchor.set(ANCHOR.x, ANCHOR.y); label.anchor.set(0.5, 1);
+      visual = { body, label, labelKey: '' };
       visuals.set(bot, visual);
       depthOrder = '';
-      actors.addChild(shadow, body); labels.addChild(label);
+      actors.addChild(body); labels.addChild(label);
     }
-    const { body, shadow, label } = visual;
+    const { body, label } = visual;
     const size = (CELL * level.botHeight) / BODY_HEIGHT;
-    shadow.position.set(bot.x, bot.y); shadow.width = size * 0.42; shadow.height = size * 0.15;
+    // The sprites carry their own soft shadow; a second, fixed one looked wrong over water.
     const sheet = botSheet(bot.look);
+    // Nothing is drawn until the robot's sheet has loaded: no placeholder shape.
+    body.visible = Boolean(sheet);
     if (sheet) {
       const clock = time + bot.offset;
       const emoting = !bot.moving && time < bot.emoteUntil;
@@ -227,7 +242,10 @@ export async function createGame(canvas: HTMLCanvasElement) {
       else if (emoting) animation = bot.emote;
       else if (!bot.moving && clock % 4 < 0.15 && bot.facing !== 'back') animation = bot.facing === 'side' ? 'blink_side' : 'emote_blink';
       const frames = sheet.animations[animation] ?? [animation];
-      const name = frames[Math.floor(clock * (sheet.fps[animation] ?? 6)) % frames.length];
+      // Idle: hold one frame and float the robot smoothly. The idle frames step at 6 a second,
+      // which read as a stutter. Walking keeps its drawn frames, which already carry the body's bob.
+      const idle = animation.startsWith('idle_');
+      const name = idle ? frames[0] : frames[Math.floor(clock * (sheet.fps[animation] ?? 6)) % frames.length];
       const frame = sheet.frames[name] ?? sheet.frames.idle_front_0;
       if (frame) {
         let framesCache = textures.get(sheet);
@@ -242,10 +260,11 @@ export async function createGame(canvas: HTMLCanvasElement) {
       }
       body.tint = 0xdecfb5;
       setBotScale(body, size, sheet.cell, bot.flip && bot.facing === 'side' && !bot.eliminated && !emoting);
-      body.position.set(bot.x, bot.y - (bot.moving ? Math.abs(Math.sin(clock * 10)) * size * 0.02 : 0));
-    } else {
-      body.texture = Texture.WHITE; body.tint = variant(bot.look).uiColor;
-      body.scale.set(size * 0.3, size * 0.5); body.position.set(bot.x, bot.y);
+      // Stepping onto a panel or a stone is a small jump: up in an arc, then a squash as it lands.
+      const air = (bot.landsAt - time) / HOP; // 1 at take-off, 0 at landing
+      const hop = air > 0 && air <= 1 ? Math.sin(air * Math.PI) * size * 0.11 : 0;
+      if (air <= 0 && air > -0.4) body.scale.y *= 1 - 0.08 * (1 + air / 0.4);
+      body.position.set(bot.x, bot.y - hop - (idle ? (Math.sin(clock * 2.4) + 1) * size * 0.008 : 0));
     }
     const text = bot.isSelf ? `${bot.name} (you)` : bot.name;
     const labelKey = `${text}:${bot.isSelf}`;
@@ -294,7 +313,7 @@ export async function createGame(canvas: HTMLCanvasElement) {
       const visual = visuals.get(bot);
       if (visual) {
         if (visual.labelKey) visual.label.texture.destroy(true);
-        visual.body.destroy(); visual.shadow.destroy(); visual.label.destroy(); visuals.delete(bot);
+        visual.body.destroy(); visual.label.destroy(); visuals.delete(bot);
       }
       bots.delete(id);
     }
@@ -302,7 +321,7 @@ export async function createGame(canvas: HTMLCanvasElement) {
     roster.forEach((player, index) => {
       let bot = bots.get(player.id);
       if (!bot) {
-        bot = { look: player.look, name: player.name, x: 0, y: 0, facing: 'front', flip: false, moving: false, eliminated: false, isSelf: false, placed: false, emote: '', emoteUntil: 0, offset: index * 1.37 };
+        bot = { look: player.look, name: player.name, x: 0, y: 0, facing: 'front', flip: false, moving: false, movingUntil: 0, eliminated: false, isSelf: false, placed: false, emote: '', emoteUntil: 0, offset: index * 1.37, platform: '', landsAt: 0 };
         bots.set(player.id, bot);
       }
       bot.look = player.look;
@@ -329,7 +348,8 @@ export async function createGame(canvas: HTMLCanvasElement) {
       }
       const stepX = bot.x - fromX;
       const stepY = bot.y - fromY;
-      bot.moving = !fresh && bot.placed && Math.hypot(stepX, stepY) / Math.max(dt, 0.001) > 25;
+      if (!fresh && bot.placed && Math.hypot(stepX, stepY) / Math.max(dt, 0.001) > 25) bot.movingUntil = time + 0.12;
+      bot.moving = time < bot.movingUntil;
       bot.placed = true;
       if (bot.moving) {
         if (Math.abs(stepX) > Math.abs(stepY / DEPTH_SQUASH) * 1.2) { bot.facing = 'side'; bot.flip = stepX < 0; }
@@ -345,6 +365,51 @@ export async function createGame(canvas: HTMLCanvasElement) {
       background.width = LEVEL_WIDTH; background.height = LEVEL_HEIGHT;
       drawnLevel = level;
     }
+    // Robots react to what they step on: a hop onto each new panel or stone, and a ripple where they land.
+    for (const bot of bots.values()) {
+      const platform = free && !bot.eliminated ? platformAt(level.id, bot.x, bot.y) : null;
+      if (platform && platform.key !== bot.platform) {
+        bot.landsAt = time + HOP;
+        ripples.push({ x: platform.x, y: platform.y, from: time + HOP, big: false });
+      }
+      bot.platform = platform?.key ?? '';
+    }
+    // A panel that just gave way: a splash where it was.
+    if (level.id === 'bridge' && state.broken !== knownBroken) {
+      const before = knownBroken.split(',');
+      for (const key of state.broken.split(',')) {
+        const [col, row] = key.split(':').map(Number);
+        if (knownBroken && key && !before.includes(key)) ripples.push({ x: BRIDGE.firstX + col * BRIDGE.columnWidth, y: BRIDGE.rowY[row], from: time, big: true });
+      }
+      knownBroken = state.broken;
+      if (free) play('caught');
+    }
+    ripples = ripples.filter((ripple) => time - ripple.from < 0.7);
+    platforms.clear();
+    if (free && level.id === 'bridge') {
+      const panel = (col: number, row: number) => ({
+        x: BRIDGE.firstX + col * BRIDGE.columnWidth - BRIDGE.panelWidth / 2, y: BRIDGE.rowY[row] - BRIDGE.panelHeight / 2,
+      });
+      // While players memorise: the safe panel in each column glows.
+      [...state.pattern].forEach((row, col) => {
+        const { x, y } = panel(col, Number(row));
+        platforms.roundRect(x, y, BRIDGE.panelWidth, BRIDGE.panelHeight, 8).fill({ color: 0xfff6a8, alpha: 0.5 + Math.sin(time * 6) * 0.2 }).stroke({ width: 5, color: 0xfff6a8 });
+      });
+      // Panels that have given way: open water where the glass was.
+      for (const key of state.broken.split(',')) {
+        const [col, row] = key.split(':').map(Number);
+        if (!key || Number.isNaN(col)) continue;
+        const { x, y } = panel(col, row);
+        platforms.roundRect(x - 3, y - 3, BRIDGE.panelWidth + 6, BRIDGE.panelHeight + 12, 6).fill({ color: 0x1f6f98, alpha: 0.95 });
+      }
+    }
+    for (const ripple of ripples) {
+      const age = (time - ripple.from) / 0.7; // 0 as the robot lands, 1 when the ring has faded
+      if (age < 0) continue;
+      const reach = (ripple.big ? 150 : 95) * (0.35 + age * 0.65);
+      platforms.ellipse(ripple.x, ripple.y, reach, reach * DEPTH_SQUASH).stroke({ width: ripple.big ? 7 : 4, color: 0xffffff, alpha: (1 - age) * 0.75 });
+      if (ripple.big) platforms.ellipse(ripple.x, ripple.y, reach * 0.55, reach * 0.55 * DEPTH_SQUASH).stroke({ width: 4, color: 0xffffff, alpha: (1 - age) * 0.6 });
+    }
     const light = free && level.id === 'rlgl' && state.phase === 'minigame' ? state.signal : null;
     fx.update(level, dt, time, light, state.phase);
     const order = [...bots.values()].sort((a, b) => a.y - b.y);
@@ -354,7 +419,6 @@ export async function createGame(canvas: HTMLCanvasElement) {
       // Reorder only when depth changes; preserve overlaps rather than grouping by look.
       for (const bot of order) {
         const visual = visuals.get(bot)!;
-        actors.setChildIndex(visual.shadow, actors.children.length - 1);
         actors.setChildIndex(visual.body, actors.children.length - 1);
       }
       depthOrder = nextOrder;

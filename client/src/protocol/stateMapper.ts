@@ -47,6 +47,11 @@ export function mapState(state: unknown) {
     phaseEndsAt: num(raw.phaseEndsAt),
     votesRemaining: num(raw.votesRemaining),
     winner: str(raw.winner),
+    prompt: str(raw.prompt),
+    optionA: str(raw.optionA),
+    optionB: str(raw.optionB),
+    stage: str(raw.stage),
+    board: str(raw.board),
     players,
   };
 }
@@ -55,6 +60,12 @@ export function mapState(state: unknown) {
 export const mapSignal = (state: unknown) => {
   const signal = asRecord(state).signal;
   return signal === 'green' || signal === 'red' ? signal : null;
+};
+
+/** What the game view needs for Glass Bridge: the lit panels (while memorising) and the broken ones. */
+export const mapBridge = (state: unknown) => {
+  const raw = asRecord(state);
+  return { pattern: str(raw.pattern), broken: str(raw.broken) };
 };
 
 export function mapLivePlayers(state: unknown): LivePlayer[] {

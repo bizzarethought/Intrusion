@@ -1,6 +1,6 @@
 import { Client, type Room } from 'colyseus.js';
 import { PositionBuffer } from './interpolation';
-import { mapLivePlayers, mapSignal, mapState } from './stateMapper';
+import { mapBridge, mapLivePlayers, mapSignal, mapState } from './stateMapper';
 import { BACKEND_URL, MAX_CHAT_LENGTH, ROOM_NAME, type ChatLine, type LivePlayer, type Snapshot } from './types';
 
 // The one place that talks to Colyseus. Screens read `Snapshot` through
@@ -8,7 +8,8 @@ import { BACKEND_URL, MAX_CHAT_LENGTH, ROOM_NAME, type ChatLine, type LivePlayer
 
 const EMPTY: Snapshot = {
   status: 'idle', error: '', roomId: '', selfId: '', hostId: '',
-  phase: 'lobby', round: 0, miniGame: '', phaseEndsAt: 0, votesRemaining: 0, winner: '', players: [], chat: [],
+  phase: 'lobby', round: 0, miniGame: '', phaseEndsAt: 0, votesRemaining: 0, winner: '',
+  prompt: '', optionA: '', optionB: '', stage: '', board: '', players: [], chat: [],
 };
 
 let room: Room | null = null;
@@ -118,10 +119,12 @@ export const subscribe = (listener: () => void) => {
 export const getSnapshot = () => snapshot;
 
 /** Positions and phase straight from the server state, for the 3D world's frame loop. */
-export function live(): { players: LivePlayer[]; signal: 'green' | 'red' | null; phase: string; miniGame: string; phaseEndsAt: number; round: number; selfId: string } {
+export function live(): { players: LivePlayer[]; signal: 'green' | 'red' | null; pattern: string; broken: string; stage: string; phase: string; miniGame: string; phaseEndsAt: number; round: number; selfId: string } {
   return {
     players: room ? positions.read(livePlayers, snapshot.selfId, performance.now()) : [],
     signal: room ? mapSignal(room.state) : null,
+    ...(room ? mapBridge(room.state) : { pattern: '', broken: '' }),
+    stage: snapshot.stage,
     phase: snapshot.phase,
     miniGame: snapshot.miniGame,
     phaseEndsAt: snapshot.phaseEndsAt,
@@ -137,4 +140,7 @@ export const send = {
   turingResult: (score: number) => room?.send('turing_result', { score }),
   vote: (targetId: string | null) => room?.send('vote', { targetId }),
   chat: (message: string) => room?.send('chat', { message: message.slice(0, MAX_CHAT_LENGTH) }),
+  /** Prompt Podium: the typed answer, and the answer picked as funniest. */
+  answer: (text: string) => room?.send('answer', { text }),
+  pick: (key: number) => room?.send('pick', { key }),
 };

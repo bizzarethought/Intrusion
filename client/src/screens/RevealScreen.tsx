@@ -45,25 +45,17 @@ export function RevealScreen({ game }: { game: Snapshot }) {
         </p>
 
         {bot && (
-          <table className="stats step-4">
-            <caption>The AI against the human average</caption>
-            <thead><tr><th scope="col" /><th scope="col">{bot.name}</th><th scope="col">Humans</th></tr></thead>
-            <tbody>
-              <tr><th scope="row">Score</th><td>{bot.score}</td><td>{average(humans, (p) => p.score)}</td></tr>
-              <tr><th scope="row">Turing check</th><td>{bot.turingScore}</td><td>{average(humans, (p) => p.turingScore)}</td></tr>
-              <tr><th scope="row">Still standing</th><td>{caught ? 'No' : 'Yes'}</td><td>{survivors.length} of {humans.length}</td></tr>
-            </tbody>
-          </table>
+          <ul className="compare step-4" aria-label="The AI against the human average">
+            <li><span>Score</span><strong>{bot.score}</strong><em>humans averaged {average(humans, (p) => p.score)}</em></li>
+            <li><span>Turing check</span><strong>{bot.turingScore}</strong><em>humans averaged {average(humans, (p) => p.turingScore)}</em></li>
+            <li><span>Humans still standing</span><strong>{survivors.length} of {humans.length}</strong><em>{caught ? 'the AI was voted out' : 'the AI never was'}</em></li>
+          </ul>
         )}
-
-        <table className="stats step-4">
-          <caption>Who was who</caption>
-          <thead><tr><th scope="col">Match alias</th><th scope="col">Player</th></tr></thead>
-          <tbody>{game.players.map(player => (
-            <tr key={player.id}><th scope="row">{player.name}</th><td>{player.isBot ? 'AI' : player.realName || 'Human'}</td></tr>
-          ))}</tbody>
-        </table>
-
+        <ul className="whowas step-4" aria-label="Who was who">
+          {game.players.map((player) => (
+            <li key={player.id} className={player.isBot ? 'whowas__ai' : ''}><span>{player.name}</span><strong>{player.isBot ? 'the AI' : player.realName || 'Human'}</strong></li>
+          ))}
+        </ul>
         <ul className="awards step-5">
           {awards.filter((award) => award.winner).map((award) => (
             <li key={award.title} className="award">

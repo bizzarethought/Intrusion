@@ -33,6 +33,19 @@ export class GameState extends Schema {
   @type("number") votesRemaining = 0;
   /** Red Light, Green Light: "green", "red", or "" when no light is showing. */
   @type("string") signal = "";
+  // Mini-game state. Each game uses the fields it needs and clears them when it ends.
+  /** The question (Pick a Side, Prompt Podium). */
+  @type("string") prompt = "";
+  @type("string") optionA = "";
+  @type("string") optionB = "";
+  /** Where the game is up to: "choose"/"result" (Pick a Side), "answer"/"vote"/"results" (Prompt Podium). */
+  @type("string") stage = "";
+  /** Glass Bridge: the safe row for each column, shown only while players memorise it. */
+  @type("string") pattern = "";
+  /** Glass Bridge: panels that are gone, as "column:row" joined by commas. */
+  @type("string") broken = "";
+  /** JSON for lists: Podium answers and results, Pick a Side counts. */
+  @type("string") board = "";
   /** "" while the match is on, then "humans" or "ai". */
   @type("string") winner = "";
   @type({ map: PlayerState }) players = new MapSchema<PlayerState>();

@@ -1,30 +1,31 @@
 import type { SpriteAnimation, SpriteFrame } from '../assets/manifest';
 import { Sprite } from './Sprite';
 
-const STEPS: Array<{ title: string; text: string; variantId: string; animation?: SpriteAnimation; frame?: SpriteFrame }> = [
-  { title: 'Run to the arena', text: 'Everyone spawns in the plaza and runs to the next mini-game.', variantId: 'cobalt', animation: 'walk_side' },
-  { title: 'Compete for points', text: 'Every mini-game scores. Finishing early scores more.', variantId: 'sunflower', frame: 'emote_happy' },
-  { title: 'Watch how they play', text: 'Too perfect? Too clumsy? How someone plays is your evidence.', variantId: 'violet', frame: 'emote_sus' },
-  { title: 'Pass the Turing check', text: 'A surprise reaction test feeds the sus meter. It is a clue, not proof.', variantId: 'lime', frame: 'emote_blink' },
-  { title: 'Argue and vote', text: 'After each mini-game, chat it out and vote someone out.', variantId: 'crimson', frame: 'emote_angry' },
-  { title: 'Catch the AI', text: 'Vote out the hidden AI to win. If it survives every vote, it wins.', variantId: 'teal', frame: 'deactivated' },
+const BEATS: Array<{ title: string; text: string; variantId: string; animation?: SpriteAnimation; frame?: SpriteFrame }> = [
+  { title: 'Play', text: 'Run to each mini-game and score points.', variantId: 'cobalt', animation: 'walk_side' },
+  { title: 'Watch', text: 'Too perfect? Too clumsy? How someone plays is your evidence.', variantId: 'violet', frame: 'emote_sus' },
+  { title: 'Vote', text: 'After each game, argue it out and vote one player out.', variantId: 'crimson', frame: 'emote_angry' },
 ];
-
 export function HowToPlay({ onClose }: { onClose: () => void }) {
   return (
     <div className="backdrop ui" onClick={onClose}>
       <div className="panel panel--wide" role="dialog" aria-modal="true" aria-label="How to play" onClick={(event) => event.stopPropagation()}>
-        <header className="panel__header"><h2>How to play</h2><button className="button button--icon" onClick={onClose} aria-label="Close" autoFocus>✕</button></header>
-        <ol className="steps">
-          {STEPS.map((step) => (
-            <li key={step.title} className="step">
-              <Sprite variantId={step.variantId} animation={step.animation} frame={step.frame} size={110} />
-              <h3>{step.title}</h3>
-              <p>{step.text}</p>
+        <header className="panel__header"><h2>How to play</h2><button className="button button--small" onClick={onClose} autoFocus>Close</button></header>
+        <p className="lede">One of you is an AI pretending to be a player. Find it.</p>
+        <ol className="trail">
+          {BEATS.map((beat) => (
+            <li key={beat.title} className="beat">
+              <Sprite variantId={beat.variantId} animation={beat.animation} frame={beat.frame} size={130} />
+              <h3>{beat.title}</h3>
+              <p>{beat.text}</p>
             </li>
           ))}
         </ol>
-        <p className="muted">Every player sees different robot looks for everyone else, so "I'm the blue one" proves nothing.</p>
+        <ul className="slips">
+          <li>Vote out the AI and the humans win. If it survives every vote, it wins.</li>
+          <li>Robot looks are different on every screen, so "I'm the blue one" proves nothing.</li>
+          <li>A surprise reaction test can interrupt a game. It gives clues, not proof.</li>
+        </ul>
       </div>
     </div>
   );

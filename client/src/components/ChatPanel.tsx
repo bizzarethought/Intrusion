@@ -26,7 +26,7 @@ export function ChatPanel({ game, onClose }: { game: Snapshot; onClose?: () => v
 
   return (
     <section className="chat" aria-label="Chat">
-      <header className="panel__header"><h2>Chat</h2>{onClose && <button className="button button--icon" onClick={onClose} aria-label="Close chat">✕</button>}</header>
+      <header className="panel__header"><h2>Chat</h2>{onClose && <button className="button button--icon" onClick={onClose} aria-label="Close chat">Close</button>}</header>
       <ol className="chat__log" ref={log} aria-live="polite">
         {game.chat.length === 0 && <li className="muted">No messages yet. Say what you saw.</li>}
         {game.chat.map((line) => {
@@ -42,7 +42,7 @@ export function ChatPanel({ game, onClose }: { game: Snapshot; onClose?: () => v
       </ol>
       <form className="chat__form" onSubmit={submit}>
         <input value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={MAX_CHAT_LENGTH} disabled={!canSend}
-          placeholder={canSend ? 'Make your case…' : 'You were voted out'} aria-label="Message" />
+          placeholder={canSend ? 'Make your case…' : 'You were voted out'} aria-label="Message" autoFocus={Boolean(onClose)} />
         <small className="muted">{draft.length}/{MAX_CHAT_LENGTH}</small>
         <button className="button button--primary button--small" disabled={!canSend || !draft.trim()}>Send</button>
       </form>

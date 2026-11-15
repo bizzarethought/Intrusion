@@ -132,3 +132,77 @@
   .rank { grid-template-columns: 28px 56px 1fr 70px; }
   .rank .meter { display: none; }
 }
+
+/* Quieter play screen: one hanging tag for the timer, one row of shortcuts. */
+.hud--quiet { grid-template-columns: 1fr; }
+.hud--quiet .hud__timer { justify-self: center; rotate: -1.5deg; }
+.hud__timer small { display: block; font: italic 600 13px var(--display); font-variation-settings: normal; color: var(--leaf); padding-top: 4px; }
+.hud__timer--low small { color: #fff7ee; }
+.hint { position: absolute; left: 12px; bottom: 16px; display: flex; gap: 6px; z-index: 4; rotate: -1deg; }
+.hint__key { position: relative; display: inline-flex; align-items: center; min-height: 44px; padding: 5px 10px; font: 600 13px var(--body); color: var(--moss); background: var(--petal); border: 2px solid var(--moss); border-radius: var(--leaf-corners-small); box-shadow: 2px 3px 0 var(--moss); cursor: pointer; }
+.hint__key:hover { background: #fffaf0; }
+/* Suspicion as a word in the margin, not a meter. */
+.clue { min-width: 9ch; font: italic 600 14px var(--display); color: #44503c; }
+.clue--odd { color: var(--rose-deep); }
+
+/* The meeting: the oak and the gathered bots stay visible behind it. */
+.backdrop--meeting { background: rgba(16, 25, 15, 0.34); align-items: flex-end; }
+.voting__header .hud__timer { rotate: 2deg; }
+.suspects li:nth-child(odd) .card { rotate: -1.2deg; }
+.suspects li:nth-child(even) .card { rotate: 1deg; }
+.suspects .clue { min-width: 0; font-size: 13px; }
+/* Reveal: the awards are paper slips laid on the black. */
+.award { border: 2.5px solid var(--moss); box-shadow: 4px 5px 0 var(--rose-deep); }
+.award:nth-child(odd) { rotate: -1deg; }
+.award:nth-child(even) { rotate: 1.2deg; }
+.reveal__verdict--humans { rotate: -1deg; border: 2.5px solid var(--moss); }
+
+/* How to play: three beats along a dashed trail. */
+.lede { font: italic 600 22px var(--display); }
+.trail { position: relative; display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); counter-reset: beat; }
+.trail::before { content: ''; position: absolute; left: 14%; right: 14%; top: 65px; border-top: 3px dashed #b9ae8c; }
+.beat { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 2px; }
+.beat h3 { font-size: 26px; }
+.beat h3::before { counter-increment: beat; content: counter(beat) '. '; color: #3d5f22; }
+.beat p { font-size: 15px; max-width: 26ch; }
+.slips { display: flex; flex-direction: column; gap: 6px; }
+.slips li { width: fit-content; padding: 7px 12px; background: #fffaf0; border: 2px solid var(--moss); border-radius: 3px; font-size: 14px; }
+.slips li:nth-child(odd) { rotate: -0.5deg; }
+.slips li:nth-child(even) { rotate: 0.6deg; margin-left: 18px; }
+/* Reveal: the machine shows itself, then the match report is paper laid on the black. */
+.glitch-frame { filter: none; }
+.compare { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-2); width: 100%; font-family: var(--body); }
+.compare li { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 12px; background: var(--petal); color: var(--moss); border: 2.5px solid var(--moss); border-radius: var(--leaf-corners-small); }
+.compare li:nth-child(odd) { rotate: -0.8deg; }
+.compare li:nth-child(even) { rotate: 0.8deg; }
+.compare span { font: italic 600 14px var(--display); color: #3d5f22; }
+.compare strong { font: 800 34px/1 var(--display); }
+.compare em { font-size: 13px; font-style: normal; color: #44503c; }
+.whowas { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; font-family: var(--body); }
+.whowas li { display: flex; align-items: baseline; gap: 6px; padding: 5px 12px; background: var(--petal); color: var(--moss); border: 2px solid var(--moss); border-radius: 4px 14px 14px 4px; font-size: 14px; }
+.whowas span { color: #44503c; }
+.whowas span::after { content: ' was'; }
+.whowas .whowas__ai { background: #000; color: var(--rose); border-color: var(--rose); border-radius: 0; font-family: var(--machine); }
+.whowas .whowas__ai span { color: #ffd9dc; }
+@media (max-width: 700px) { .trail, .compare { grid-template-columns: 1fr; } .trail::before { display: none; } }
+
+/* Pick a Side: the question in the middle, each answer on the side you walk to for it. */
+.sides { position: absolute; top: 84px; left: 12px; right: 12px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: start; gap: var(--space-2); pointer-events: none; z-index: 3; }
+.sides__question { padding: 8px 18px; background: var(--petal); border: 2.5px solid var(--moss); border-radius: var(--leaf-corners-small); box-shadow: var(--press); font-size: 22px; }
+.sides__option { display: flex; flex-direction: column; max-width: 30ch; padding: 10px 16px; background: var(--petal); border: 2.5px solid var(--moss); border-radius: var(--leaf-corners-small); box-shadow: var(--press); font: 700 20px/1.2 var(--display); }
+.sides__option small { font: italic 600 13px var(--display); color: var(--leaf); }
+.sides__option strong { font-size: 34px; }
+.sides__option--roses { justify-self: start; rotate: -1deg; border-color: var(--rose-deep); }
+.sides__option--boulders { justify-self: end; rotate: 1deg; text-align: right; }
+.sides__option--won { background: var(--dandelion); }
+
+/* Prompt Podium: one card at the bottom, over the boulders. */
+.podium { position: absolute; left: 50%; bottom: 72px; translate: -50% 0; width: min(640px, calc(100vw - 24px)); max-height: 56vh; z-index: 4; }
+.podium__form { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.podium__answers { display: flex; flex-direction: column; gap: 6px; }
+.podium__answers .button { width: 100%; text-align: left; font-weight: 600; }
+.podium__result { display: grid; grid-template-columns: 1fr auto auto; align-items: baseline; gap: 10px; padding: 7px 12px; background: var(--petal-shade); border-radius: var(--leaf-corners-small); }
+.podium__result small { color: #44503c; }
+.podium__result:first-child { background: #ffe9a0; border: 2px solid var(--moss); }
+@media (max-width: 700px) { .sides { grid-template-columns: 1fr 1fr; } .sides__question { grid-column: 1 / -1; grid-row: 1; justify-self: center; } }
+@media (max-width: 1200px) { .objective { bottom: 72px; } .podium { bottom: 124px; } }

@@ -155,3 +155,8 @@ button.card:disabled { cursor: not-allowed; opacity: 0.55; box-shadow: none; }
 .card__name { display: flex; align-items: center; font-weight: 700; max-width: 170px; }
 .card__name > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .card__meta { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #44503c; }
+
+/* A taped note, not a side-striped card. */
+.note { border: 2px solid var(--moss); border-left-width: 2px; rotate: 0.6deg; box-shadow: 3px 4px 0 var(--moss); }
+/* The machine without the neon glow: plain black, hard red edge. */
+.machine { background: #000; box-shadow: 0 0 0 4px #000; }

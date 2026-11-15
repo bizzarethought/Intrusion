@@ -10,6 +10,12 @@ test("the most-voted player is out", () => {
   assert.equal(votedOut(["a", "b", "a", null]), "a");
 });
 
+test("skips are votes for nobody: one vote cannot beat a room of skips", () => {
+  assert.equal(votedOut(["a", null, null, null]), null);
+  assert.equal(votedOut(["a", "a", null, null]), null);
+  assert.equal(votedOut(["a", "a", "a", null, null]), "a");
+});
+
 test("a tie for first, or only skips, removes nobody", () => {
   assert.equal(votedOut(["a", "b"]), null);
   assert.equal(votedOut([null, null]), null);

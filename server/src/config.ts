@@ -7,6 +7,8 @@ function positiveInt(value: string | undefined, fallback: number): number {
 
 export const config = {
   port: positiveInt(process.env.PORT, 2567),
+  /** Optional: a fixed order of mini-games (comma-separated ids), for demos and tests. Default is a shuffled pool. */
+  miniGames: (process.env.MINI_GAMES ?? "").split(",").map((id) => id.trim()).filter(Boolean),
   ai: {
     baseUrl: process.env.AI_BASE_URL ?? process.env.AMD_TOKENLAB_BASE_URL ?? "",
     apiKey: process.env.AI_API_KEY ?? process.env.AMD_TOKENLAB_API_KEY ?? "",

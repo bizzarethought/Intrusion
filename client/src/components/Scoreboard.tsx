@@ -1,5 +1,6 @@
 import { variantFor } from '../assets/looks';
 import type { Player, Snapshot } from '../protocol/types';
+import { clueFor } from './clue';
 import { Sprite } from './Sprite';
 
 type Props = {
@@ -24,7 +25,7 @@ export function Scoreboard({ game, gains, votedOut, final, onClose }: Props) {
       <div className="panel panel--wide scoreboard" role="dialog" aria-label="Scoreboard" onClick={(event) => event.stopPropagation()}>
         <header className="panel__header">
           <h2>Scoreboard</h2>
-          {onClose && <button className="button button--icon" onClick={onClose} aria-label="Close scoreboard" autoFocus>✕</button>}
+          {onClose && <button className="button button--icon" onClick={onClose} aria-label="Close scoreboard" autoFocus>Close</button>}
         </header>
         {final && (
           <p className="verdict">
@@ -40,9 +41,7 @@ export function Scoreboard({ game, gains, votedOut, final, onClose }: Props) {
                 {player.name}{player.id === game.selfId && <span className="tag tag--you">you</span>}
                 {player.eliminated && <span className="tag tag--out">voted out</span>}
               </span>
-              <span className="meter" title="Sus meter: a clue, not a verdict">
-                <span style={{ width: `${sus(player)}%` }} /><small>sus</small>
-              </span>
+              <span className={`clue clue--${clueFor(player).id}`} title="A clue, not a verdict">{game.round > 0 && !player.eliminated ? clueFor(player).label : ''}</span>
               <span className="rank__score">{player.score}{(gains.get(player.id) ?? 0) > 0 && <em className="gain">+{gains.get(player.id)}</em>}</span>
             </li>
           ))}

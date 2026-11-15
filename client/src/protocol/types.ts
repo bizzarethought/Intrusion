@@ -28,8 +28,6 @@ export type MiniGame = {
   reveals: string;
   /** Accent colour for the arena, sign and UI. */
   color: string;
-  /** Fully playable, or an arena shell with a race-to-the-arena fallback. */
-  playable: boolean;
 };
 
 export const MINI_GAMES: Record<string, MiniGame> = {
@@ -38,44 +36,32 @@ export const MINI_GAMES: Record<string, MiniGame> = {
     how: 'Sprint to the finish. Move on red and you go back to the start.',
     reveals: 'Reaction timing',
     color: '#ff4d6d',
-    playable: true,
   },
   'pick-a-side': {
     name: 'Pick a Side',
-    how: 'A would-you-rather prompt. Run to a platform before time runs out.',
+    how: 'A would-you-rather. Walk to the bank you choose before time runs out.',
     reveals: 'Decisions and crowd-following',
     color: '#4dd2ff',
-    playable: false,
   },
   'prompt-podium': {
     name: 'Prompt Podium',
-    how: 'Type an answer, then run to the funniest one to vote.',
+    how: 'Type an answer, then vote for the funniest one.',
     reveals: 'Humour and typing rhythm',
     color: '#ffd24d',
-    playable: false,
   },
   'glass-bridge-memory': {
     name: 'Glass Bridge Memory',
-    how: 'Safe tiles flash once. Cross from memory.',
+    how: 'Safe panels flash once. Cross from memory; a wrong panel drops you back.',
     reveals: 'Memory and accuracy',
     color: '#9b7bff',
-    playable: false,
-  },
-  'tile-drop': {
-    name: 'Tile Drop',
-    how: 'Tiles fall after you step on them. Last one standing wins.',
-    reveals: 'Panic movement and pathing',
-    color: '#4dffa6',
-    playable: false,
   },
 };
 
 export const UNKNOWN_MINI_GAME: MiniGame = {
   name: 'Mystery arena',
-  how: 'This mini-game is new to the client. Follow the marker.',
+  how: 'This mini-game is new to this version of the game.',
   reveals: 'Unknown',
   color: '#ffffff',
-  playable: false,
 };
 
 export const miniGameInfo = (id: string): MiniGame => MINI_GAMES[id] ?? UNKNOWN_MINI_GAME;
@@ -115,6 +101,15 @@ export type Snapshot = {
   votesRemaining: number;
   /** '' while the match is on, then 'humans' or 'ai'. */
   winner: string;
+  // Mini-game state; each game fills in what it uses.
+  /** The question (Pick a Side, Prompt Podium). */
+  prompt: string;
+  optionA: string;
+  optionB: string;
+  /** 'choose'/'result' (Pick a Side) or 'answer'/'vote'/'results' (Prompt Podium). */
+  stage: string;
+  /** JSON lists from the server: Podium answers and results, Pick a Side counts. */
+  board: string;
   players: Player[];
   chat: ChatLine[];
 };

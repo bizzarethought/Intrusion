@@ -7,14 +7,20 @@ export function voteBudget(humans: number): number {
 }
 
 /**
- * Who a vote removes: the player with the most votes. Nobody is removed on a
- * tie for first, or when every vote was a skip (null).
+ * Who a vote removes: the player with the most votes. A skip (null) is a vote
+ * for nobody, so nobody is removed on a tie for first or when skips match or
+ * beat the leader. Without that, one vote could remove a player while everyone
+ * else abstained, and the AI always votes.
  */
 export function votedOut(votes: Iterable<string | null>): string | null {
   const counts = new Map<string, number>();
-  for (const target of votes) if (target) counts.set(target, (counts.get(target) ?? 0) + 1);
+  let skips = 0;
+  for (const target of votes) {
+    if (target) counts.set(target, (counts.get(target) ?? 0) + 1);
+    else skips++;
+  }
   const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1]);
-  if (!ranked.length || (ranked.length > 1 && ranked[0][1] === ranked[1][1])) return null;
+  if (!ranked.length || ranked[0][1] <= skips || (ranked.length > 1 && ranked[0][1] === ranked[1][1])) return null;
   return ranked[0][0];
 }
 

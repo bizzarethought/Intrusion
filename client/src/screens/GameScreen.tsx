@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { play } from '../audio';
 import { ChatPanel } from '../components/ChatPanel';
 import { GameHud } from '../components/GameHud';
+import { PodiumPanel, SidePanel } from '../components/MiniGamePanels';
 import { PhaseBanner } from '../components/PhaseBanner';
 import { Scoreboard } from '../components/Scoreboard';
 import { SettingsPanel } from '../components/SettingsPanel';
@@ -45,7 +46,12 @@ export function GameScreen({ game }: { game: Snapshot }) {
   useEffect(() => { if (chatVisible) setReadCount(game.chat.length); }, [chatVisible, game.chat.length]);
   useEffect(() => {
     // Tab shows the scoreboard, like most games.
-    const onKey = (event: KeyboardEvent) => { if (event.code === 'Tab') { event.preventDefault(); setOpen((now) => (now === 'scores' ? null : 'scores')); } };
+    const onKey = (event: KeyboardEvent) => {
+      const typing = event.target instanceof HTMLElement && ['INPUT', 'TEXTAREA'].includes(event.target.tagName);
+      if (event.code === 'Tab') { event.preventDefault(); setOpen((now) => (now === 'scores' ? null : 'scores')); }
+      else if (event.code === 'Enter' && !typing) { event.preventDefault(); setOpen('chat'); }
+      else if (event.code === 'Escape') setOpen((now) => (now ? null : 'settings'));
+    };
     addEventListener('keydown', onKey);
     return () => removeEventListener('keydown', onKey);
   }, []);
@@ -56,6 +62,8 @@ export function GameScreen({ game }: { game: Snapshot }) {
     <div className="screen game">
       <GameHud game={game} unread={game.chat.length - readCount} onScores={() => toggle('scores')} onChat={() => toggle('chat')} onSettings={() => toggle('settings')} />
       {game.phase === 'travel' && <PhaseBanner miniGame={game.miniGame} />}
+      {moving && game.miniGame === 'pick-a-side' && <SidePanel game={game} />}
+      {moving && game.miniGame === 'prompt-podium' && <PodiumPanel key={game.round} game={game} />}
       {game.phase === 'turing-check' && <TuringCheckPanel endsAt={game.phaseEndsAt} />}
       {game.phase === 'voting' && <VotingScreen key={game.round} game={game} />}
       {game.phase === 'scoreboard' && <Scoreboard game={game} gains={gains} votedOut={votedOut} final />}

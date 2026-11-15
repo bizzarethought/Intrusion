@@ -37,6 +37,43 @@ export const RLGL = {
   watcher: { x: 1790, y: 410, radius: 230 },
 };
 
+/** Glass Bridge: seven columns of two glass panels between the banks. Mirrors BRIDGE in server/src/game/minigames.ts. */
+export const BRIDGE = {
+  firstX: 596.4, // centre of the first column
+  columnWidth: 145.45,
+  rowY: [568.7, 470.2], // centre of row 0 (nearer) and row 1 (further)
+  rowSplit: 519.5,
+  left: 523.7, // where the left bank ends and the glass starts
+  right: 1541.8,
+  top: 421,
+  bottom: 618,
+  panelWidth: 124,
+  panelHeight: 86,
+};
+
+/** Pick a Side: the rose bank, the boulder bank, and the stepping stones between. */
+export const SIDES = {
+  leftX: 760,
+  rightX: 1600,
+  stones: [[700, 480], [900, 470], [1105, 490], [1310, 505], [1512, 478]],
+};
+
+/** The platform (glass panel or stepping stone) under a point, if any: its name and centre. */
+export function platformAt(level: LevelId, x: number, y: number): { key: string; x: number; y: number } | null {
+  if (level === 'bridge' && x >= BRIDGE.left && x < BRIDGE.right && y >= BRIDGE.top && y <= BRIDGE.bottom) {
+    const col = Math.min(6, Math.floor((x - BRIDGE.left) / BRIDGE.columnWidth));
+    const row = y < BRIDGE.rowSplit ? 1 : 0;
+    const centre = { x: BRIDGE.firstX + col * BRIDGE.columnWidth, y: BRIDGE.rowY[row] };
+    // Only the middle of a panel counts as standing on it, as on the server.
+    return Math.abs(x - centre.x) < BRIDGE.columnWidth * 0.36 && Math.abs(y - centre.y) < 34 ? { key: `${col}:${row}`, ...centre } : null;
+  }
+  if (level === 'side') {
+    const stone = SIDES.stones.find(([sx, sy]) => Math.hypot(x - sx, (y - sy) / DEPTH_SQUASH) < 95);
+    if (stone) return { key: `stone-${stone[0]}`, x: stone[0], y: stone[1] };
+  }
+  return null;
+}
+
 /**
  * Where a robot may stand. The art has no collision maps yet, so these are
  * rough hand-drawn shapes: stay on the grass, out of the water.
@@ -47,6 +84,16 @@ export function walkable(level: LevelId, x: number, y: number): boolean {
     if (y < 310 || y > 930) return false; // top bank and the water along the bottom
     if (x > 980 && x < 1650 && y < 470) return false; // the pond
     if (x > 1640 && Math.hypot(x - RLGL.watcher.x, y - RLGL.watcher.y) < 190) return false; // the giant rose
+  }
+  if (level === 'bridge') {
+    if (x < BRIDGE.left) return y > 290 && y < 650; // left bank
+    if (x < BRIDGE.right) return y >= BRIDGE.top && y <= BRIDGE.bottom; // over the water there is only the bridge
+    return y > 380 && y < 900 && Math.hypot(x - 1720, y - 460) > 110; // right bank, around its rose
+  }
+  if (level === 'side') {
+    if (x < SIDES.leftX && y > 250 && y < 690 && !(x < 450 && y < 290)) return true; // rose bank, below the giant rose
+    if (x > SIDES.rightX && y > 430 && y < 1020) return true; // boulder bank
+    return x >= 640 && x <= 1620 && y > 440 && y < 545; // the stepping stones
   }
   return true;
 }

@@ -46,13 +46,13 @@ export function TuringCheckPanel({ endsAt }: { endsAt: number }) {
   return (
     <div className="backdrop backdrop--machine ui">
       <div className="machine turing" role="dialog" aria-modal="true" aria-label="Turing check">
-        <h2>&gt; turing check_</h2>
+        <h2>Turing check</h2>
         <p>{finished ? 'Result logged. It feeds the sus meter.' : 'Hit the pad (or press Space) the instant it turns green.'}</p>
         <button className={`pad pad--${step}`} onClick={hit} disabled={finished} autoFocus>
           {step === 'wait' && 'Wait for it…'}
           {step === 'go' && 'NOW!'}
-          {step === 'done' && `${millis} ms ✓`}
-          {step === 'early' && 'Too early ✓'}
+          {step === 'done' && `${millis} ms`}
+          {step === 'early' && 'Too early'}
         </button>
         <div className="progress" aria-hidden="true"><span style={{ width: `${Math.min(100, seconds * 20)}%` }} /></div>
         <small className="muted">{seconds}s left</small>

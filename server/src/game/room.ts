@@ -1,25 +1,23 @@
 import { Client, Room, generateId } from "colyseus";
 import { AiClient, type BotContext } from "../ai/client.js";
 import { BotConversation, addressesBot } from "../ai/conversation.js";
+import { config } from "../config.js";
 import {
-  GET_READY_MS,
   LOADING_MS,
   MAX_HUMANS,
-  MINI_GAMES,
   MIN_HUMANS,
-  ROUND_DURATION_MS,
   SCOREBOARD_MS,
   TURING_MS,
   VOTE_DURATION_MS,
   type Phase,
 } from "./constants.js";
-import { RLGL_FIELD, placementPoints, voteBudget, votedOut } from "./rules.js";
+import { MINI_GAME_IDS, createMiniGame, type Host, type MiniGame } from "./minigames.js";
+import { placementPoints, voteBudget, votedOut } from "./rules.js";
 import { matchAliases, shuffled } from "./identities.js";
 import { GameState, PlayerState } from "./schema.js";
 
 const RUN_SPEED = 1.5; // metres per second; the client walks at this speed
 const SPEED_SLACK = 1.5; // how far over that a move may be before it is cut short (network jitter)
-const RED_GRACE_MS = 400; // reaction time allowed after the light turns red
 const CHAT_GAP_MS = 600; // one chat message per player per this long
 const between = (min: number, max: number) => min + Math.random() * (max - min);
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
@@ -46,11 +44,24 @@ export class FindTheBotRoom extends Room<GameState> {
   private readonly lastChatAt = new Map<string, number>();
   private recentChat: Array<{ name: string; message: string }> = [];
   private finishers = 0;
-  private signalSince = 0;
-  /** How the AI plays this round and when it next acts. */
-  private readonly bot = { speed: 1.3, lane: 0, moving: false, switchAt: 0, voteAt: 0 };
+  /** When the AI casts its vote. */
+  private readonly bot = { voteAt: 0 };
+  /** The mini-game being played, and the ones still to come this match (shuffled, refilled when empty). */
+  private game: MiniGame = createMiniGame(MINI_GAME_IDS[0]);
+  private pool: string[] = [];
+  /** What a mini-game may ask of the room. */
+  private readonly host: Host = {
+    state: this.state,
+    bot: () => {
+      const bot = this.state.players.get(this.botId);
+      return bot && !bot.eliminated ? bot : undefined;
+    },
+    playing: () => this.playing(),
+    finish: (player) => this.finish(player),
+    endIn: (ms) => this.beginPhase("minigame", ms),
+    askAi: (question) => this.aiClient.answer(question),
+  };
   private phaseTimer?: ReturnType<typeof setTimeout>;
-  private signalTimer?: ReturnType<typeof setTimeout>;
   private tickTimer?: ReturnType<typeof setInterval>;
 
   onCreate(): void {
@@ -63,6 +74,13 @@ export class FindTheBotRoom extends Room<GameState> {
       this.castVote(this.playerId(client.sessionId), typeof target === "string" ? target : null);
     });
     this.onMessage("chat", (client, message) => this.chat(client, asRecord(message)));
+    // Mini-game input: a typed answer and a pick (Prompt Podium).
+    for (const type of ["answer", "pick"]) {
+      this.onMessage(type, (client, message) => {
+        const player = this.state.players.get(this.playerId(client.sessionId));
+        if (this.state.phase === "minigame" && player && !player.eliminated) this.game.message(this.host, player, type, asRecord(message), Date.now());
+      });
+    }
     this.tickTimer = setInterval(() => this.tick(), 100);
   }
 
@@ -93,7 +111,6 @@ export class FindTheBotRoom extends Room<GameState> {
   onDispose(): void {
     this.conversation.stop();
     clearTimeout(this.phaseTimer);
-    clearTimeout(this.signalTimer);
     clearInterval(this.tickTimer);
   }
 
@@ -164,12 +181,11 @@ export class FindTheBotRoom extends Room<GameState> {
         this.startRound();
         break;
       case "travel":
-        this.setSignal("green");
-        this.beginPhase("minigame", ROUND_DURATION_MS);
+        this.game.begin(this.host, Date.now());
+        this.beginPhase("minigame", this.game.durationMs);
         break;
       case "minigame": {
-        clearTimeout(this.signalTimer);
-        this.state.signal = "";
+        this.game.end(this.host);
         this.turingDone.clear();
         const bot = this.state.players.get(this.botId);
         if (bot) bot.turingScore = Math.round(between(35, 90)); // sometimes looks more human than a human
@@ -196,24 +212,21 @@ export class FindTheBotRoom extends Room<GameState> {
     }
   }
 
-  /** Puts everyone on the start line for the next mini-game. */
+  /** Draws the next mini-game from the shuffled pool and sets everyone up for it. */
   private startRound(): void {
     this.state.round += 1;
-    this.state.miniGame = MINI_GAMES[(this.state.round - 1) % MINI_GAMES.length];
-    this.state.signal = "";
+    if (!this.pool.length) {
+      const fixed = config.miniGames.filter((id) => (MINI_GAME_IDS as readonly string[]).includes(id));
+      this.pool = fixed.length ? [...fixed] : shuffled(MINI_GAME_IDS);
+    }
+    this.state.miniGame = this.pool.shift()!;
+    this.game = createMiniGame(this.state.miniGame);
     this.finishers = 0;
     this.lastMoveAt.clear();
     const lineup = this.all().filter((player) => !player.eliminated);
-    lineup.forEach((player, i) => {
-      const share = lineup.length > 1 ? i / (lineup.length - 1) : 0.5;
-      player.x = RLGL_FIELD.spawnX - (i % 2) * 0.23; // two staggered columns
-      player.z = RLGL_FIELD.laneTop + share * (RLGL_FIELD.laneBottom - RLGL_FIELD.laneTop);
-      player.finished = false;
-      if (player.id === this.botId) this.bot.lane = player.z;
-    });
-    this.bot.speed = between(1.15, RUN_SPEED);
-    this.bot.moving = false;
-    this.beginPhase("travel", GET_READY_MS);
+    for (const player of lineup) player.finished = false;
+    this.game.setup(this.host, lineup);
+    this.beginPhase("travel", this.game.readyMs);
   }
 
   private reveal(): void {
@@ -227,41 +240,7 @@ export class FindTheBotRoom extends Room<GameState> {
     this.state.phaseEndsAt = 0;
   }
 
-  // ---------------------------------------------- Red Light, Green Light
-
-  private setSignal(color: "green" | "red"): void {
-    const now = Date.now();
-    this.state.signal = color;
-    this.signalSince = now;
-    // The AI reacts like a person: a beat late to start, and now and then too late to stop.
-    this.bot.switchAt = now + (color === "green" ? between(250, 700) : between(100, 480));
-    clearTimeout(this.signalTimer);
-    this.signalTimer = setTimeout(
-      () => this.setSignal(color === "green" ? "red" : "green"),
-      color === "green" ? between(2_200, 4_400) : between(1_600, 3_200),
-    );
-  }
-
-  /**
-   * Moves a player, human or AI, under the same rules. Returns false if the
-   * rose caught them moving on red and sent them back to the start.
-   */
-  private tryMove(player: PlayerState, x: number, z: number, now: number): boolean {
-    const field = RLGL_FIELD;
-    // shortcut: only the picture's edges are enforced here, not the pond or the rose; add shapes when collision art exists
-    x = clamp(x, field.minX, field.maxX);
-    z = clamp(z, field.minZ, field.maxZ);
-    const moved = Math.hypot(x - player.x, z - player.z);
-    const onField = player.x > field.startX && player.x < field.finishX && !player.finished;
-    if (this.state.signal === "red" && now - this.signalSince > RED_GRACE_MS && onField && moved > 0.03) {
-      player.x = field.spawnX;
-      return false;
-    }
-    player.x = x;
-    player.z = z;
-    if (!player.finished && x >= field.finishX) this.finish(player);
-    return true;
-  }
+  // ------------------------------------------------------------- mini-games
 
   private finish(player: PlayerState): void {
     player.finished = true;
@@ -286,17 +265,7 @@ export class FindTheBotRoom extends Room<GameState> {
       stepX *= reach / distance;
       stepZ *= reach / distance;
     }
-    if (!this.tryMove(player, player.x + stepX, player.z + stepZ, now)) client.send("caught");
-  }
-
-  /** The AI's turn in the mini-game, ten times a second. */
-  private stepBot(now: number): void {
-    const bot = this.state.players.get(this.botId);
-    if (!bot || bot.eliminated || bot.finished) return;
-    if (now >= this.bot.switchAt) this.bot.moving = this.state.signal === "green";
-    if (!this.bot.moving) return;
-    const drift = (this.bot.lane - bot.z) * 0.05 + between(-0.01, 0.01); // wanders a little, like a hand on a keyboard
-    if (!this.tryMove(bot, bot.x + this.bot.speed * 0.1, bot.z + drift, now)) this.bot.moving = false;
+    if (!this.game.move(this.host, player, player.x + stepX, player.z + stepZ, now)) client.send("caught");
   }
 
   // ------------------------------------------------------- checks and votes
@@ -369,7 +338,7 @@ export class FindTheBotRoom extends Room<GameState> {
 
   private tick(): void {
     const now = Date.now();
-    if (this.state.phase === "minigame") this.stepBot(now);
+    if (this.state.phase === "minigame") this.game.tick(this.host, now);
     if (this.state.phase !== "voting") return;
     const bot = this.state.players.get(this.botId);
     if (!bot || bot.eliminated) return;
