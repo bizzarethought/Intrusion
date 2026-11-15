@@ -111,36 +111,58 @@ function sideGround(art: HTMLImageElement, ground: Uint8Array | null, foreground
   ctx.drawImage(art, 0, 0);
   const collision = ground ? Uint8Array.from(ground) : new Uint8Array(COLLISION_WIDTH * COLLISION_HEIGHT).fill(1);
 
-  // Each bank's ground in its colour. The mask is the bank's walkable ground, soft at the edges,
-  // fading out where the land runs on out of play instead of stopping at a line.
-  const bank = (side: 'a' | 'b', colour: string) => {
-    const mask = document.createElement('canvas');
-    mask.width = COLLISION_WIDTH; mask.height = COLLISION_HEIGHT;
-    const maskCtx = mask.getContext('2d')!;
-    for (let row = 0; row < COLLISION_HEIGHT; row++) for (let column = 0; column < COLLISION_WIDTH; column++) {
-      const x = column * 4, y = row * 4;
-      if (!collision[row * COLLISION_WIDTH + column] || bankAt(x, y) !== side) continue;
-      const fade = side === 'a' ? (SIDES.gapY + 40 - y) / 70 : y > SIDES.gapY ? (x - SIDES.gapX + 20) / 120 : 1;
-      if (fade <= 0) continue;
-      maskCtx.fillStyle = `rgba(0,0,0,${Math.min(1, fade)})`;
-      maskCtx.fillRect(column, row, 1, 1);
+  // Each bank in its colour, right up to the water's edge and round whatever stands on it.
+  // Land is the walkable ground, plus the footprints of things standing on it (the pond cannot
+  // reach those), plus a margin: the collision map is coarse and stops short of the shore.
+  const cells = COLLISION_WIDTH * COLLISION_HEIGHT;
+  const pond = new Uint8Array(cells);
+  const reach = [Math.floor(300 / 4) * COLLISION_WIDTH + Math.floor(SIDES.midX / 4)]; // open water, above the stones
+  pond[reach[0]] = 1;
+  for (let next = 0; next < reach.length; next++) {
+    for (const step of [-1, 1, -COLLISION_WIDTH, COLLISION_WIDTH]) {
+      const cell = reach[next] + step;
+      if (cell >= 0 && cell < cells && !collision[cell] && !pond[cell]) { pond[cell] = 1; reach.push(cell); }
     }
+  }
+  let land = Uint8Array.from(collision, (solid, cell) => Number(solid || !pond[cell]));
+  for (let margin = 0; margin < 6; margin++) {
+    const from = land;
+    land = from.map((solid, cell) => solid || from[cell - 1] || from[cell + 1] || from[cell - COLLISION_WIDTH] || from[cell + COLLISION_WIDTH] || 0);
+  }
+  // Then pixel by pixel on the picture itself, so the colour stops exactly where the water or a stone begins.
+  const picture = ctx.getImageData(0, 0, LEVEL_WIDTH, LEVEL_HEIGHT).data;
+  const masks = [new ImageData(LEVEL_WIDTH, LEVEL_HEIGHT), new ImageData(LEVEL_WIDTH, LEVEL_HEIGHT)];
+  for (let y = 0; y < LEVEL_HEIGHT; y++) for (let x = 0; x < LEVEL_WIDTH; x++) {
+    if (!land[(y >> 2) * COLLISION_WIDTH + (x >> 2)]) continue;
+    if (x > SIDES.leftX && x < SIDES.rightX - 32 && y > SIDES.top && y < SIDES.bottom) continue; // the crossing is nobody's
+    const at = (y * LEVEL_WIDTH + x) * 4;
+    const r = picture[at], g = picture[at + 1], b = picture[at + 2];
+    if (b > r + 25 && g > r + 10) continue; // open water
+    if (Math.min(r, g, b) > 150 && Math.max(r, g, b) - Math.min(r, g, b) < 45) continue; // a pale stepping stone
+    const red = x < SIDES.midX;
+    // The land runs on out of play at the bottom: the colour fades there instead of stopping at a line.
+    const fade = red ? (SIDES.gapY + 40 - y) / 70 : y > SIDES.gapY ? (x - SIDES.gapX + 20) / 120 : 1;
+    if (fade > 0) masks[red ? 0 : 1].data[at + 3] = Math.min(1, fade) * 255;
+  }
+  masks.forEach((mask, i) => {
+    const cut = document.createElement('canvas');
+    cut.width = LEVEL_WIDTH; cut.height = LEVEL_HEIGHT;
+    cut.getContext('2d')!.putImageData(mask, 0, 0);
     const layer = document.createElement('canvas');
     layer.width = LEVEL_WIDTH; layer.height = LEVEL_HEIGHT;
     const layerCtx = layer.getContext('2d')!;
     layerCtx.drawImage(art, 0, 0);
-    layerCtx.globalCompositeOperation = 'color'; layerCtx.fillStyle = colour; layerCtx.fillRect(0, 0, LEVEL_WIDTH, LEVEL_HEIGHT);
+    // The grass keeps its blades and light, and takes the answer's colour.
+    layerCtx.globalCompositeOperation = 'color'; layerCtx.fillStyle = i ? '#2468f2' : '#e8232f'; layerCtx.fillRect(0, 0, LEVEL_WIDTH, LEVEL_HEIGHT);
     layerCtx.globalCompositeOperation = 'source-over'; layerCtx.globalAlpha = 0.42; layerCtx.fillRect(0, 0, LEVEL_WIDTH, LEVEL_HEIGHT);
     layerCtx.globalAlpha = 1; layerCtx.globalCompositeOperation = 'destination-in';
-    layerCtx.filter = 'blur(7px)'; // where a browser has no canvas filter the edge is just crisper
-    layerCtx.drawImage(mask, 0, 0, LEVEL_WIDTH, LEVEL_HEIGHT);
+    layerCtx.filter = 'blur(1.5px)'; // just enough to take the stair-steps off the edge
+    layerCtx.drawImage(cut, 0, 0);
     layerCtx.filter = 'none';
     // Roses and boulders keep their own colours, wherever they overhang the grass.
     if (foreground) { layerCtx.globalCompositeOperation = 'destination-out'; layerCtx.drawImage(foreground, 0, 0); }
     ctx.drawImage(layer, 0, 0);
-  };
-  bank('a', '#e8232f');
-  bank('b', '#2468f2');
+  });
 
   // The islet: an uneven round of the bank's grass on a rim of dark soil, like the banks have.
   const { x, y, rx, ry } = SIDES.islet;
@@ -210,6 +232,37 @@ const picture = (name: string) => new Promise<HTMLImageElement | null>((resolve)
   img.src = `/assets/levels/${name}${VERSION}`;
 });
 
+/**
+ * The art's boxes are estimates and often cut through the thing they are for, which shows as a
+ * straight edge the moment a robot walks behind it. This grows each box until nothing in the
+ * foreground picture crosses its edge, so the whole rose or boulder moves in front as one.
+ */
+function fitOccluders(foreground: HTMLImageElement, boxes: Level['occluders']): Level['occluders'] {
+  const canvas = document.createElement('canvas');
+  canvas.width = COLLISION_WIDTH; canvas.height = COLLISION_HEIGHT;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+  ctx.drawImage(foreground, 0, 0, COLLISION_WIDTH, COLLISION_HEIGHT);
+  const pixels = ctx.getImageData(0, 0, COLLISION_WIDTH, COLLISION_HEIGHT).data;
+  const solid = (x: number, y: number) => x >= 0 && y >= 0 && x < COLLISION_WIDTH && y < COLLISION_HEIGHT && pixels[(y * COLLISION_WIDTH + x) * 4 + 3] > 40;
+  const fitted = boxes.map((box) => {
+    let left = Math.floor(box.x / 4), top = Math.floor(box.y / 4), right = Math.ceil((box.x + box.width) / 4), bottom = Math.ceil((box.y + box.height) / 4);
+    const row = (y: number) => { for (let x = left; x < right; x++) if (solid(x, y)) return true; return false; };
+    const column = (x: number) => { for (let y = top; y < bottom; y++) if (solid(x, y)) return true; return false; };
+    for (let grown = true; grown;) {
+      grown = false;
+      if (row(top - 1)) { top--; grown = true; }
+      if (row(bottom)) { bottom++; grown = true; }
+      if (column(left - 1)) { left--; grown = true; }
+      if (column(right)) { right++; grown = true; }
+    }
+    return { x: left * 4, y: top * 4, width: (right - left) * 4, height: (bottom - top) * 4, baseY: box.baseY };
+  });
+  // Two boxes that grew into one object (a rose and the bud beside it): keep the one standing nearest the camera.
+  const inside = (inner: (typeof fitted)[number], outer: (typeof fitted)[number]) =>
+    inner.x >= outer.x && inner.y >= outer.y && inner.x + inner.width <= outer.x + outer.width && inner.y + inner.height <= outer.y + outer.height;
+  return fitted.filter((box, i) => !fitted.some((other, j) => j !== i && inside(box, other) && (other.baseY > box.baseY || (other.baseY === box.baseY && j < i))));
+}
+
 export function loadLevel(id: LevelId): Promise<Level> {
   let pending = cache.get(id);
   if (!pending) {
@@ -224,12 +277,14 @@ export function loadLevel(id: LevelId): Promise<Level> {
       if (!image) throw new Error(`level image ${id} is missing`);
       const spawns = (file.spawn_points ?? []).flatMap((point) => (point.px ? [{ x: point.px[0], y: point.px[1] }] : []));
       // Boxes can hang over the edge of the picture; keep the part that is on it.
-      const occluders = (file.occluders ?? []).flatMap(({ box_px: box, base_y_px: baseY }) => {
+      let occluders = (file.occluders ?? []).flatMap(({ box_px: box, base_y_px: baseY }) => {
         if (!box || baseY === undefined) return [];
         const x = Math.max(0, box[0]), y = Math.max(0, box[1]);
         const width = Math.min(LEVEL_WIDTH, box[2]) - x, height = Math.min(LEVEL_HEIGHT, box[3]) - y;
         return width > 0 && height > 0 ? [{ x, y, width, height, baseY }] : [];
       });
+      // Only the pond needs it: elsewhere the boxes fit to a few pixels, and on the bridge a rose and a boulder overlap, which growing would merge.
+      if (foreground && id === 'side') occluders = fitOccluders(foreground, occluders);
       let collision: Uint8Array | null = null;
       if (map) {
         const canvas = document.createElement('canvas');

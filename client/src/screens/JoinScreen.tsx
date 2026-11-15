@@ -40,7 +40,7 @@ export function JoinScreen({ game, onBack }: { game: Snapshot; onBack: () => voi
         <div className="divider">or join one</div>
         <label className="field">
           <span>Room code</span>
-          <input value={code} onChange={(event) => setCode(event.target.value)} placeholder="Paste the code from the host" autoCapitalize="off" autoCorrect="off" spellCheck={false} />
+          <input value={code} onChange={(event) => setCode(event.target.value.toUpperCase())} maxLength={4} placeholder="The host's 4-letter code" autoCapitalize="characters" autoCorrect="off" spellCheck={false} />
         </label>
         <button type="button" className="button" onClick={() => go('join')} disabled={!cleanName || !code.trim() || busy}>Join room</button>
         <p className="status" role="status" aria-live="polite">

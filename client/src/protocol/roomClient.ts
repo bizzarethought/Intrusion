@@ -78,7 +78,7 @@ export async function connect(mode: 'create' | 'join', displayName: string, code
   try {
     joined = mode === 'create'
       ? await client.create(ROOM_NAME, { displayName })
-      : await client.joinById(code.trim(), { displayName });
+      : await client.joinById(code.trim().toUpperCase(), { displayName });
   } catch (error) {
     publish({ ...EMPTY, error: friendly(error) });
     return;

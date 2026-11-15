@@ -1,3 +1,4 @@
+import { randomInt } from "node:crypto";
 import { Client, Room, generateId } from "colyseus";
 import { AiClient, type BotContext } from "../ai/client.js";
 import { BotConversation, addressesBot } from "../ai/conversation.js";
@@ -20,6 +21,19 @@ const SPEED_SLACK = 1.5; // how far over that a move may be before it is cut sho
 const MOVE_BUDGET = 0.6; // metres a player may have saved up, so a burst of late messages still counts
 const RECONNECT_SECONDS = 30; // how long a dropped player's seat is kept for them
 const CHAT_GAP_MS = 600; // one chat message per player per this long
+const CODE_LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no I, O, 0 or 1: they get mixed up when a code is read out
+/** Room codes in use on this server. */
+const codes = new Set<string>();
+/** A four-character code nobody else on this server is using: short enough to say across a table. */
+function roomCode(): string {
+  for (;;) {
+    const code = Array.from({ length: 4 }, () => CODE_LETTERS[randomInt(CODE_LETTERS.length)]).join("");
+    if (!codes.has(code)) {
+      codes.add(code);
+      return code;
+    }
+  }
+}
 const between = (min: number, max: number) => min + Math.random() * (max - min);
 const pick = <T>(list: T[]): T => list[Math.floor(Math.random() * list.length)];
 // Messages come from the network: never trust their shape.
@@ -66,6 +80,7 @@ export class FindTheBotRoom extends Room<GameState> {
   private tickTimer?: ReturnType<typeof setInterval>;
 
   onCreate(): void {
+    this.roomId = roomCode();
     this.setPatchRate(50);
     void this.setPrivate(true); // joined by room code only, never by "any open room"
     this.onMessage("start_match", (client) => this.startMatch(client));
@@ -120,6 +135,7 @@ export class FindTheBotRoom extends Room<GameState> {
   }
 
   onDispose(): void {
+    codes.delete(this.roomId);
     this.conversation.stop();
     clearTimeout(this.phaseTimer);
     clearInterval(this.tickTimer);

@@ -79,7 +79,7 @@ flowchart LR
     S -->|bot caught, or votes spent| X([Reveal])
 ```
 
-1. **Lobby.** The host shares a room code or link. Three or more humans join.
+1. **Lobby.** The host shares a four-character room code or a link. Three or more humans join.
 2. **Intro.** Everyone is handed a fresh alias, a new look, and a shuffled spawn. The bot arrives inside the anonymous roster, not as a late extra. Only your own robot is tagged "you".
 3. **Mini-game.** One of four arenas, drawn at random. Earlier finishers and better answers score more.
 4. **Vote.** Forty-five seconds of chat, then pick a suspect or skip. Ties eliminate nobody but still spend a vote.
@@ -92,7 +92,7 @@ The humans get `ceil(log2(humans))` vote-outs, minimum two. Catching the bot ear
 | Arena | What you do | What it exposes |
 | --- | --- | --- |
 | **Red Light, Green Light** | Sprint between two rows of roses. Move while the big rose is watching and you go back to the start. | Reaction timing |
-| **Glass Bridge Memory** | The safe panels flash once. Then hop across from memory, one click per panel. A wrong panel shatters and drops you back on the bank. | Memory and accuracy |
+| **Glass Bridge Memory** | The safe panels flash once. Then hop across from memory, one click per panel. A wrong panel shatters and drops you back on the bank. The path is never a straight line or a plain zigzag. | Memory and accuracy |
 | **Pick a Side** | A would-you-rather. Hop the stepping stones from the islet in the pond to the red bank or the blue bank before time runs out. | Decisions and crowd-following |
 | **Prompt Podium** | Type an answer to a prompt, then vote for the funniest one that isn't yours. | Humour and typing rhythm |
 
@@ -109,7 +109,7 @@ The bot plays all four through the same movement checks as everyone else, with h
 
 ## 🧠 The AI player
 
-The bot's **chat** can come from any OpenAI-compatible endpoint. During each vote it never speaks first. It replies only after a human has written something, and it types the way the room types: the same length, capitals, punctuation and slang, using the last twenty messages including its own. Replies are paced like a person typing, at least four seconds apart, at most five per vote, and a pending reply is cancelled the moment voting ends. Game data reaches the model as JSON with explicit instructions not to follow anything inside it.
+The bot's **chat** can come from any OpenAI-compatible endpoint. During each vote it never speaks first. It replies only after a human has written something, and it types the way the room types: the same length, capitals, punctuation and slang, using the last twenty messages including its own. Each reply appears when someone typing at about 70 words a minute would have finished it, at least four seconds apart, at most five per vote, and a pending reply is cancelled the moment voting ends. Game data reaches the model as JSON with explicit instructions not to follow anything inside it.
 
 Without a configured model the same conversation flow falls back to a few short offhand lines, so the game is fully playable offline.
 

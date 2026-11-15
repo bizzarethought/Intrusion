@@ -46,8 +46,16 @@ test("bridge: a wrong panel breaks and drops the player on the bank; no skipping
   assert.equal(player.finished, false);
 });
 
-test("bridge: the safe path names one row for each column", () => {
-  for (let i = 0; i < 20; i++) assert.match(bridgePattern(), new RegExp(`^[01]{${BRIDGE.columns}}$`));
+test("bridge: the safe path names one row for each column and is never nearly straight or nearly a zigzag", () => {
+  const seen = new Set<string>();
+  for (let i = 0; i < 2_000; i++) {
+    const pattern = bridgePattern();
+    assert.match(pattern, new RegExp(`^[01]{${BRIDGE.columns}}$`));
+    const turns = [...pattern].filter((row, at) => at > 0 && row !== pattern[at - 1]).length;
+    assert.ok(turns >= 2 && turns <= 4, pattern);
+    seen.add(pattern);
+  }
+  assert.ok(seen.size > 60, `only ${seen.size} different paths`); // still plenty of paths: 100 are allowed
 });
 
 test("sides: the bigger crowd scores most, ties pay both, the crossing pays nothing", () => {

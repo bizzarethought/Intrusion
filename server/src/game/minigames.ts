@@ -151,9 +151,18 @@ export const BRIDGE = {
 };
 const HOP_MS = 250; // one hop at a time: the next is refused until this one has landed
 
-/** A safe row (0 or 1) for each column, as a string. Each column is its own coin flip. */
+/**
+ * A safe row (0 or 1) for each column, as a string. Each column is a coin flip, but a path that
+ * runs nearly straight or nearly zigzags is thrown back: anyone could cross it without
+ * remembering, and a player who then "forgets" one gives themselves away. The path changes row
+ * two, three or four times in its six steps.
+ */
 export function bridgePattern(random: () => number = Math.random): string {
-  return Array.from({ length: BRIDGE.columns }, () => (random() < 0.5 ? "0" : "1")).join("");
+  for (;;) {
+    const pattern = Array.from({ length: BRIDGE.columns }, () => (random() < 0.5 ? "0" : "1")).join("");
+    const turns = [...pattern].filter((row, i) => i > 0 && row !== pattern[i - 1]).length;
+    if (turns >= 2 && turns <= 4) return pattern;
+  }
 }
 
 /**

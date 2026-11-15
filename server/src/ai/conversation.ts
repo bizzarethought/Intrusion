@@ -3,6 +3,8 @@ import type { BotContext } from "./client.js";
 export type ChatTurn = { name: string; message: string };
 const MAX_MESSAGES = 5;
 const GAP_MS = 4_000;
+/** How long a line takes to type at 70 words a minute, give or take 5 (a word is five characters). */
+const typingMs = (line: string, random: () => number) => (line.length * 12_000) / (65 + random() * 10);
 
 export function addressesBot(message: string, name: string): boolean {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -29,7 +31,10 @@ function casual(line: string, context: BotContext): string {
   return line;
 }
 
-/** Speaks only when spoken to: human messages trigger replies. No opener, no bot-to-bot feedback loop. */
+/**
+ * Speaks only when spoken to: human messages trigger replies. No opener, no bot-to-bot feedback loop.
+ * A reply appears when a person typing at 70 words a minute would have finished it, however fast the model was.
+ */
 export class BotConversation {
   private active = false;
   private generation = 0;
@@ -38,6 +43,8 @@ export class BotConversation {
   private nextAt = 0;
   private pending: { reply: ChatTurn; direct: boolean } | undefined;
   private request: AbortController | undefined;
+  /** A finished reply still being "typed", and when it will be sent. */
+  private ready: { line: string; at: number } | undefined;
   private previous = "";
 
   private readonly respond: (context: BotContext, signal: AbortSignal) => Promise<string | null>;
@@ -66,6 +73,7 @@ export class BotConversation {
     this.request?.abort();
     this.request = undefined;
     this.pending = undefined;
+    this.ready = undefined;
   }
 
   hear(turn: ChatTurn, botName: string): void {
@@ -76,12 +84,24 @@ export class BotConversation {
     const alreadyWaiting = !!this.pending;
     this.pending = { reply: turn, direct };
     // More incoming messages update context without postponing the reply forever.
-    if (!alreadyWaiting) this.dueAt = Math.max(this.nextAt, this.now() + 1_500 + this.random() * 2_500);
+    if (!alreadyWaiting) this.dueAt = Math.max(this.nextAt, this.now() + 700 + this.random() * 800); // a moment to read it
   }
 
   tick(endsAt: number, context: () => BotContext, send: (line: string) => void): void {
-    if (!this.active || this.request || !this.pending || this.sent >= MAX_MESSAGES) return;
+    if (!this.active) return;
     const now = this.now();
+    if (this.ready) {
+      if (now < this.ready.at) return; // still typing
+      const { line } = this.ready;
+      this.ready = undefined;
+      if (now >= endsAt) return; // the vote closed first
+      this.previous = line;
+      this.sent++;
+      this.nextAt = now + GAP_MS;
+      send(line);
+      return;
+    }
+    if (this.request || !this.pending || this.sent >= MAX_MESSAGES) return;
     if (now < Math.max(this.dueAt, this.nextAt) || endsAt - now < 1_000) return;
     const generation = this.generation;
     const turn = this.pending;
@@ -89,10 +109,10 @@ export class BotConversation {
     const controller = new AbortController();
     this.request = controller;
     const data = { ...context(), replyTo: turn.reply };
-    void this.reply(data, controller, generation, endsAt, send);
+    void this.reply(data, controller, generation, now);
   }
 
-  private async reply(context: BotContext, controller: AbortController, generation: number, endsAt: number, send: (line: string) => void) {
+  private async reply(context: BotContext, controller: AbortController, generation: number, startedAt: number) {
     let line: string | null = null;
     try {
       line = await this.respond(context, controller.signal);
@@ -101,12 +121,9 @@ export class BotConversation {
     }
     if (!this.active || generation !== this.generation || controller.signal.aborted) return;
     this.request = undefined;
-    if (this.now() >= endsAt) return;
     line = casual((line ?? "").replace(/\s+/g, " ").trim().slice(0, 240), context);
     if (!line || line === this.previous || BREAKS_CHARACTER.test(line)) line = fallback(context, this.sent);
-    this.previous = line;
-    this.sent++;
-    this.nextAt = this.now() + GAP_MS;
-    send(line);
+    // It started typing when it started on its answer, so the model's own speed is hidden inside the typing time.
+    this.ready = { line, at: startedAt + typingMs(line, this.random) };
   }
 }

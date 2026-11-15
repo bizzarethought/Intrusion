@@ -38,10 +38,12 @@ test("room routes successive player messages into bot replies using public conve
   internal.aiClient.respond = async context => { contexts.push(context); return `reply ${contexts.length}: ${context.replyTo?.name}`; };
   try {
     internal.chat(client, { message: "Sam, your reaction was too perfect" });
-    now += 2000; internal.tick(); await flush();
+    now += 2000; internal.tick(); await flush(); // it starts on a reply...
+    now += 3000; internal.tick(); // ...and sends it once it would have finished typing
     assert.equal(messages.filter(line => line.playerId === "bot").length, 1);
     now += 1000; internal.chat(client, { message: "you still haven't explained it" });
     now += 3000; internal.tick(); await flush();
+    now += 3000; internal.tick();
     assert.equal(messages.filter(line => line.playerId === "bot").length, 2);
     assert.equal(contexts[1].replyTo?.message, "you still haven't explained it");
     assert.ok(contexts[1].recentChat.some(line => line.name === "Sam" && line.message.startsWith("reply 1")));
