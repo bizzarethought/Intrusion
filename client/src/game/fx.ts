@@ -21,6 +21,29 @@ let configPromise: Promise<FxConfig> | undefined;
 let foliagePromise: Promise<Texture[]> | undefined;
 let waterPromise: Promise<Sheet> | undefined;
 let rosePromise: Promise<Sheet> | undefined;
+let pollenTexture: Texture | undefined;
+let rippleTexture: Texture | undefined;
+function rippleRing() {
+  if (rippleTexture) return rippleTexture;
+  const image = document.createElement('canvas'); image.width = 128; image.height = 64;
+  const ctx = image.getContext('2d')!;
+  ctx.strokeStyle = 'rgba(208,240,238,0.85)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.ellipse(64, 32, 60, 26, 0, 0, Math.PI * 2); ctx.stroke();
+  ctx.strokeStyle = 'rgba(208,240,238,0.3)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.ellipse(64, 32, 48, 20, 0, 0, Math.PI * 2); ctx.stroke();
+  return rippleTexture = Texture.from(image);
+}
+function pollenDot() {
+  if (pollenTexture) return pollenTexture;
+  const image = document.createElement('canvas'); image.width = image.height = 24;
+  const ctx = image.getContext('2d')!;
+  const glow = ctx.createRadialGradient(12, 12, 0, 12, 12, 12);
+  glow.addColorStop(0, 'rgba(255,246,191,1)');
+  glow.addColorStop(0.25, 'rgba(255,231,148,0.8)');
+  glow.addColorStop(1, 'rgba(255,231,148,0)');
+  ctx.fillStyle = glow; ctx.fillRect(0, 0, 24, 24);
+  return pollenTexture = Texture.from(image);
+}
 
 async function imageFile(name: string) {
   const response = await fetch(ROOT + name);
@@ -66,6 +89,8 @@ function grassy(level: LevelId, x: number, y: number) {
 }
 
 type Plant = { sprite: Sprite; phase: number; strength: number };
+type Ripple = { sprite: Sprite; phase: number };
+type Pollen = { sprite: Sprite; x: number; y: number; phase: number; speed: number };
 export function createFx() {
   const ground = new Container();
   const foreground = new Container();
@@ -73,8 +98,13 @@ export function createFx() {
   let level: Level | undefined;
   let generation = 0;
   let plants: Plant[] = [];
+  let pollen: Pollen[] = [];
   let water: TilingSprite[] = [];
+  let ripples: Ripple[] = [];
   let watcher: Sprite | undefined;
+  let oakRose: Sprite | undefined;
+  let oakRoseTexture: Texture | undefined;
+  let oakCoverTexture: Texture | undefined;
   let settings: FxConfig | undefined;
   let roseFrames: Texture[] = [];
   let waterFrames: Texture[] = [];
@@ -85,14 +115,17 @@ export function createFx() {
   let error = '';
   let patchTexture: Texture | undefined;
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
-  const stats = { ready: false, level: '', foliage: 0, waterAreas: 0, roseFrame: -1, waterFrame: -1, reducedMotion: false, error: '' };
+  const stats = { ready: false, level: '', foliage: 0, waterAreas: 0, roseFrame: -1, waterFrame: -1, oakRoseScale: 1, reducedMotion: false, pollen: 0, ripples: 0, wind: 0, waterOffset: 0, error: '' };
 
   function clear() {
     // Containers own sprites and masks; atlas sources are shared and cached for the next round.
     for (const child of ground.removeChildren()) child.destroy({ children: true });
     for (const child of foreground.removeChildren()) child.destroy({ children: true });
     patchTexture?.destroy(true); patchTexture = undefined;
-    plants = []; water = []; watcher = undefined; roseFrames = [];
+    oakRoseTexture?.destroy(true); oakRoseTexture = undefined;
+    oakCoverTexture?.destroy(true); oakCoverTexture = undefined;
+    oakRose = undefined;
+    plants = []; pollen = []; water = []; ripples = []; watcher = undefined; roseFrames = [];
     ready = false; error = ''; lastWaterFrame = -1; lastRoseFrame = -1; pose = 0;
   }
 
@@ -112,11 +145,21 @@ export function createFx() {
       const group = new Container();
       const mask = new Graphics().poly(polygon).fill(0xffffff);
       const surface = new TilingSprite({ texture: waterSheet.frames[0], width: Math.max(...xs) - x, height: Math.max(...ys) - y });
-      surface.position.set(x, y); surface.alpha = 0.16;
+      surface.position.set(x, y); surface.alpha = 0.28;
       const scale = current.pixelsPerMeter / cfg.water.pixels_per_meter;
       surface.tileScale.set(scale, scale);
       group.addChild(surface, mask); surface.mask = mask;
       ground.addChild(group); water.push(surface);
+      // A handful of expanding rings makes the broad, low-contrast water animation legible.
+      let placed = 0;
+      for (let attempt = 0; placed < 6 && attempt < 200; attempt++) {
+        const rx = x + ((attempt * 0.618033 + 0.2) % 1) * surface.width;
+        const ry = y + ((attempt * 0.414214 + 0.35) % 1) * surface.height;
+        const inset = [[-65, 0], [65, 0], [0, -32], [0, 32], [-45, -23], [45, 23]];
+        if (!inset.every(([dx, dy]) => insidePolygon(rx + dx, ry + dy, polygon))) continue;
+        const sprite = new Sprite(rippleRing()); sprite.anchor.set(0.5); sprite.position.set(rx, ry);
+        group.addChild(sprite); ripples.push({ sprite, phase: placed / 6 }); placed++;
+      }
     }
     let seed = [...current.id].reduce((n, char) => n + char.charCodeAt(0), 37);
     const random = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
@@ -127,10 +170,44 @@ export function createFx() {
       const sprite = new Sprite(foliage[Math.floor(random() * foliage.length)]);
       const scale = cfg.foliage.draw_scale_to_match_level * (0.75 + random() * 0.4);
       sprite.anchor.set(...cfg.foliage.anchor); sprite.position.set(x, y); sprite.scale.set(scale); sprite.tint = 0xdecfb5;
-      ground.addChild(sprite); plants.push({ sprite, phase: random() * Math.PI * 2, strength: 0.015 + random() * 0.02 });
+      ground.addChild(sprite); plants.push({ sprite, phase: random() * Math.PI * 2, strength: 0.16 + random() * 0.1 });
     }
     plants.sort((a, b) => a.sprite.y - b.sprite.y);
     for (const plant of plants) ground.setChildIndex(plant.sprite, ground.children.length - 1);
+
+    if (current.id === 'oak' || current.id === 'rlgl') {
+      const count = innerWidth < 700 ? 12 : 24;
+      for (let i = 0; i < count; i++) {
+        const sprite = new Sprite(pollenDot());
+        sprite.anchor.set(0.5); sprite.width = sprite.height = 8 + random() * 9;
+        const particle = { sprite, x: random() * 1920, y: 100 + random() * 900, phase: random() * Math.PI * 2, speed: 7 + random() * 10 };
+        ground.addChild(sprite); pollen.push(particle);
+      }
+    }
+
+    if (current.id === 'oak') {
+      // Isolate the oak rose from its own background so its camera angle and lighting match.
+      // This small color mask is prepared once on entry; animation only changes GPU transforms.
+      const x = 742, y = 516, width = 216, height = 162;
+      const flower = document.createElement('canvas'); flower.width = width; flower.height = height;
+      const ctx = flower.getContext('2d')!;
+      ctx.drawImage(current.image, x, y, width, height, 0, 0, width, height);
+      const pixels = ctx.getImageData(0, 0, width, height);
+      for (let i = 0; i < pixels.data.length; i += 4) {
+        const r = pixels.data[i], g = pixels.data[i + 1], b = pixels.data[i + 2];
+        pixels.data[i + 3] = Math.round(255 * Math.max(0, Math.min(1, (r - Math.max(g * 1.18, b * 1.1) - 8) / 20)));
+      }
+      ctx.putImageData(pixels, 0, 0);
+      const coverImage = document.createElement('canvas'); coverImage.width = width; coverImage.height = height;
+      const coverCtx = coverImage.getContext('2d')!;
+      coverCtx.drawImage(current.image, 630, 320, width, height, 0, 0, width, height);
+      coverCtx.globalCompositeOperation = 'destination-in'; coverCtx.drawImage(flower, 0, 0);
+      oakCoverTexture = Texture.from(coverImage);
+      const cover = new Sprite(oakCoverTexture); cover.position.set(x, y); ground.addChild(cover);
+      oakRoseTexture = Texture.from(flower);
+      oakRose = new Sprite(oakRoseTexture); oakRose.anchor.set(0.5, 0.78);
+      oakRose.position.set(x + width * 0.5, y + height * 0.78); foreground.addChild(oakRose);
+    }
 
     if (roseSheet) {
       roseFrames = roseSheet.frames;
@@ -172,12 +249,45 @@ export function createFx() {
           for (const surface of water) surface.texture = waterFrames[waterFrame];
           lastWaterFrame = waterFrame;
         }
+        // A gentle current remains visible between the sheet's 10 FPS frames.
+        for (const surface of water) {
+          surface.tilePosition.set(quiet ? 0 : time * 8, quiet ? 0 : Math.sin(time * 0.45) * 8);
+        }
+        for (const ripple of ripples) {
+          ripple.sprite.visible = !quiet;
+          if (!quiet) {
+            const progress = (time * 0.24 + ripple.phase) % 1;
+            ripple.sprite.scale.set(0.25 + progress * 0.75);
+            ripple.sprite.alpha = Math.sin(progress * Math.PI) * 0.48;
+          }
+        }
+        const breeze = Math.sin(time * 1.1);
         const budget = innerWidth < 700 ? 48 : MAX_FOLIAGE;
         for (let i = 0; i < plants.length; i++) {
           const plant = plants[i];
           const visible = i < budget && plant.sprite.x > -100 && plant.sprite.x < 2020 && plant.sprite.y > -100 && plant.sprite.y < 1180;
           plant.sprite.visible = visible;
-          if (visible) plant.sprite.skew.x = quiet ? 0 : Math.sin(time * 1.35 + plant.phase) * plant.strength;
+          if (visible) {
+            const bend = quiet ? 0 : (breeze * 0.55 + Math.sin(time * 1.6 + plant.phase) * 0.45) * plant.strength;
+            plant.sprite.skew.x = bend;
+            plant.sprite.rotation = bend * 0.16;
+          }
+        }
+        const pollenBudget = innerWidth < 700 ? 12 : 24;
+        for (let i = 0; i < pollen.length; i++) {
+          const particle = pollen[i];
+          particle.sprite.visible = !quiet && i < pollenBudget;
+          if (!particle.sprite.visible) continue;
+          // Wrap softly at the edges; positions are absolute-time based and frame-rate independent.
+          const drift = particle.x + time * particle.speed;
+          particle.sprite.position.set((drift % 2040) - 60, particle.y + Math.sin(time * 0.65 + particle.phase) * 22);
+          particle.sprite.alpha = (0.25 + (Math.sin(time * 0.8 + particle.phase) + 1) * 0.16);
+        }
+        if (oakRose) {
+          const bloom = quiet ? 0 : Math.sin(time * 1.15);
+          oakRose.scale.set(1 + bloom * 0.045, 1 + bloom * 0.09);
+          oakRose.rotation = quiet ? 0 : Math.sin(time * 0.8) * 0.045;
+          oakRose.skew.x = quiet ? 0 : Math.sin(time * 0.8 + 0.5) * 0.035;
         }
         if (watcher) {
           pose = rosePose(pose, phase === 'minigame' && signal === 'green', dt, quiet);
@@ -185,7 +295,10 @@ export function createFx() {
           if (frame !== lastRoseFrame) { watcher.texture = roseFrames[frame]; lastRoseFrame = frame; }
         }
       }
-      Object.assign(stats, { ready, level: current.id, foliage: plants.length, waterAreas: water.length, roseFrame: lastRoseFrame, waterFrame: lastWaterFrame, reducedMotion: quiet, error });
+      Object.assign(stats, { ready, level: current.id, foliage: plants.length, waterAreas: water.length, roseFrame: lastRoseFrame, waterFrame: lastWaterFrame, reducedMotion: quiet, oakRoseScale: oakRose?.scale.y ?? 1,
+        ripples: quiet ? 0 : ripples.length,
+        pollen: quiet ? 0 : Math.min(pollen.length, innerWidth < 700 ? 12 : 24),
+        wind: plants[0]?.sprite.skew.x ?? 0, waterOffset: water[0]?.tilePosition.x ?? 0, error });
     },
   };
 }

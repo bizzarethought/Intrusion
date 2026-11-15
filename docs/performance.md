@@ -29,3 +29,9 @@ Water uses 10 FPS ping-pong playback in conservative pond masks, preserving the 
 With the new FX, a local ten-player Chrome smoke test measured approximately 60 FPS, 16.8 ms p95 frame interval, and 0.8 ms average CPU frame work, with 86 foliage pieces and two water areas. Browser checks covered rose endpoints, changing water frames, lazy rose loading, reduced motion, mobile limits, arena cleanup, and a missing water asset. These measurements are local headless results; real phones should still be profiled.
 
 Use `?perf=1` and inspect `window.intrusionFx` for live readiness, active level, foliage count, water/rose frame numbers, reduced-motion state, and load errors. The periodic `window.intrusionPerformance` report includes the FX snapshot.
+
+### Main screen motion visibility
+
+The oak scene now uses stronger root-anchored foliage sway, a slow water current, six expanding pond rings, and up to 24 drifting pollen sprites (12 on narrow screens). Ring and pollen textures are drawn once and reused; no live blur filters are used. Including foliage, the scenery stays below 150 moving pieces. All added motion stops or hides in reduced-motion mode.
+
+A landing-page browser check compared screenshots of pond and grass regions that exclude the robot and UI. Over 1.4 seconds, approximately 2.3% of pond pixels and 39.4% of grass pixels changed above a visible color threshold. The same run measured 60 FPS and 0.72 ms average CPU frame work locally, with no page errors. Narrow-screen limits and reduced-motion behavior also passed. This verifies scenery movement rather than relying solely on advancing animation counters.
