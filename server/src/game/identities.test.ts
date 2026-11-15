@@ -11,7 +11,6 @@ type Internals = {
   startMatch(client: Client): void;
   startRound(): void;
   move(client: Client, message: Record<string, unknown>): void;
-  recordTuringResult(client: Client, message: Record<string, unknown>): void;
   chat(client: Client, message: Record<string, unknown>): void;
   reveal(): void;
 };
@@ -73,11 +72,10 @@ test("aliases stay fixed across rounds and session-based actions reach the right
     const id = internal.playerId(clients[0].sessionId), me = room.state.players.get(id)!;
     room.state.phase = "minigame"; room.state.signal = "green";
     const oldX = me.x; internal.move(clients[0], { x: me.x + 0.05, z: me.z }); assert.ok(me.x > oldX);
-    room.state.phase = "turing-check"; internal.recordTuringResult(clients[0], { score: 72 }); assert.equal(me.turingScore, 72);
     room.state.phase = "voting"; internal.chat(clients[0], { message: "who looked suspicious?" });
     assert.equal(broadcasts[0].playerId, id);
     assert.ok(!JSON.stringify(broadcasts).includes(clients[0].sessionId));
-    room.onLeave(clients[1]); assert.equal(room.state.players.get(internal.playerId(clients[1].sessionId))?.connected, false);
+    void room.onLeave(clients[1], true); assert.equal(room.state.players.get(internal.playerId(clients[1].sessionId))?.connected, false);
     internal.pendingWinner = "humans"; internal.reveal();
     assert.equal(me.realName, "Friend One"); assert.equal(room.state.players.get(internal.botId)?.isBot, true);
     assert.deepEqual([...room.state.players].map(([id, player]) => [id, player.displayName]), identities);

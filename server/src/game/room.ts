@@ -7,7 +7,6 @@ import {
   MAX_HUMANS,
   MIN_HUMANS,
   SCOREBOARD_MS,
-  TURING_MS,
   VOTE_DURATION_MS,
   type Phase,
 } from "./constants.js";
@@ -18,9 +17,10 @@ import { GameState, PlayerState } from "./schema.js";
 
 const RUN_SPEED = 1.5; // metres per second; the client walks at this speed
 const SPEED_SLACK = 1.5; // how far over that a move may be before it is cut short (network jitter)
+const MOVE_BUDGET = 0.6; // metres a player may have saved up, so a burst of late messages still counts
+const RECONNECT_SECONDS = 30; // how long a dropped player's seat is kept for them
 const CHAT_GAP_MS = 600; // one chat message per player per this long
 const between = (min: number, max: number) => min + Math.random() * (max - min);
-const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 const pick = <T>(list: T[]): T => list[Math.floor(Math.random() * list.length)];
 // Messages come from the network: never trust their shape.
 const asRecord = (value: unknown): Record<string, unknown> =>
@@ -39,8 +39,8 @@ export class FindTheBotRoom extends Room<GameState> {
   private readonly lobbyNames = new Map<string, string>();
   private pendingWinner: "" | "humans" | "ai" = "";
   private readonly votes = new Map<string, string | null>();
-  private readonly turingDone = new Set<string>();
-  private readonly lastMoveAt = new Map<string, number>();
+  /** Each player's movement allowance, and when it was last topped up. */
+  private readonly pace = new Map<string, { at: number; budget: number }>();
   private readonly lastChatAt = new Map<string, number>();
   private recentChat: Array<{ name: string; message: string }> = [];
   private finishers = 0;
@@ -66,19 +66,20 @@ export class FindTheBotRoom extends Room<GameState> {
 
   onCreate(): void {
     this.setPatchRate(50);
+    void this.setPrivate(true); // joined by room code only, never by "any open room"
     this.onMessage("start_match", (client) => this.startMatch(client));
     this.onMessage("move", (client, message) => this.move(client, asRecord(message)));
-    this.onMessage("turing_result", (client, message) => this.recordTuringResult(client, asRecord(message)));
     this.onMessage("vote", (client, message) => {
       const target = asRecord(message).targetId;
       this.castVote(this.playerId(client.sessionId), typeof target === "string" ? target : null);
     });
     this.onMessage("chat", (client, message) => this.chat(client, asRecord(message)));
-    // Mini-game input: a typed answer and a pick (Prompt Podium).
-    for (const type of ["answer", "pick"]) {
+    // Mini-game input: a typed answer and a pick (Prompt Podium), a hop to a panel (Glass Bridge).
+    for (const type of ["answer", "pick", "hop"]) {
       this.onMessage(type, (client, message) => {
         const player = this.state.players.get(this.playerId(client.sessionId));
-        if (this.state.phase === "minigame" && player && !player.eliminated) this.game.message(this.host, player, type, asRecord(message), Date.now());
+        if (this.state.phase !== "minigame" || !player || player.eliminated) return;
+        if (this.game.message(this.host, player, type, asRecord(message), Date.now()) === false) client.send("caught");
       });
     }
     this.tickTimer = setInterval(() => this.tick(), 100);
@@ -93,7 +94,7 @@ export class FindTheBotRoom extends Room<GameState> {
     if (!this.state.hostId) this.state.hostId = client.sessionId;
   }
 
-  onLeave(client: Client): void {
+  async onLeave(client: Client, consented?: boolean): Promise<void> {
     const player = this.state.players.get(this.playerId(client.sessionId));
     if (!player) return;
     if (this.state.phase === "lobby") {
@@ -106,6 +107,15 @@ export class FindTheBotRoom extends Room<GameState> {
     player.connected = false;
     // Don't make everyone wait on someone who has gone.
     if (this.state.phase === "voting" && this.everyoneVoted()) this.resolveVote();
+    else if (this.state.phase === "minigame" && this.finishers > 0 && this.playing().every((each) => each.finished)) this.beginPhase("minigame", 2_000);
+    if (consented || this.state.phase === "reveal") return;
+    // A dropped connection, unlike a goodbye, may come back to the same seat for a while.
+    try {
+      await this.allowReconnection(client, RECONNECT_SECONDS);
+      player.connected = true;
+    } catch {
+      // they did not come back
+    }
   }
 
   onDispose(): void {
@@ -186,22 +196,13 @@ export class FindTheBotRoom extends Room<GameState> {
         this.game.begin(this.host, Date.now());
         this.beginPhase("minigame", this.game.durationMs);
         break;
-      case "minigame": {
+      case "minigame":
         this.game.end(this.host);
-        this.turingDone.clear();
-        const bot = this.state.players.get(this.botId);
-        if (bot) bot.turingScore = Math.round(between(35, 90)); // sometimes looks more human than a human
-        this.beginPhase("turing-check", TURING_MS);
-        break;
-      }
-      case "turing-check": {
         this.votes.clear();
-        const now = Date.now();
-        this.bot.voteAt = now + between(5_000, VOTE_DURATION_MS * 0.6);
+        this.bot.voteAt = Date.now() + between(5_000, VOTE_DURATION_MS * 0.6);
         this.beginPhase("voting", VOTE_DURATION_MS);
         this.conversation.start();
         break;
-      }
       case "voting":
         this.resolveVote();
         break;
@@ -224,7 +225,7 @@ export class FindTheBotRoom extends Room<GameState> {
     this.state.miniGame = this.pool.shift()!;
     this.game = createMiniGame(this.state.miniGame);
     this.finishers = 0;
-    this.lastMoveAt.clear();
+    this.pace.clear();
     const lineup = this.all().filter((player) => !player.eliminated);
     for (const player of lineup) player.finished = false;
     this.game.setup(this.host, lineup);
@@ -256,29 +257,24 @@ export class FindTheBotRoom extends Room<GameState> {
     const player = this.state.players.get(this.playerId(client.sessionId));
     if (!player || player.eliminated || !finite(message.x) || !finite(message.z)) return;
     const now = Date.now();
-    // Nobody moves faster than a run. A longer step is cut short, not thrown away.
-    const elapsed = Math.min((now - (this.lastMoveAt.get(player.id) ?? 0)) / 1000, 0.5);
-    this.lastMoveAt.set(player.id, now);
-    const reach = RUN_SPEED * SPEED_SLACK * elapsed + 0.05;
+    // Nobody moves faster than a run, however many messages they send: distance is paid for out of
+    // an allowance that refills with time. A longer step is cut short, not thrown away.
+    const pace = this.pace.get(player.id) ?? { at: now, budget: MOVE_BUDGET };
+    pace.budget = Math.min(MOVE_BUDGET, pace.budget + (RUN_SPEED * SPEED_SLACK * (now - pace.at)) / 1000);
+    pace.at = now;
+    this.pace.set(player.id, pace);
     let stepX = message.x - player.x;
     let stepZ = message.z - player.z;
     const distance = Math.hypot(stepX, stepZ);
-    if (distance > reach) {
-      stepX *= reach / distance;
-      stepZ *= reach / distance;
+    if (distance > pace.budget) {
+      stepX *= pace.budget / distance;
+      stepZ *= pace.budget / distance;
     }
+    pace.budget -= Math.min(distance, pace.budget);
     if (!this.game.move(this.host, player, player.x + stepX, player.z + stepZ, now)) client.send("caught");
   }
 
-  // ------------------------------------------------------- checks and votes
-
-  private recordTuringResult(client: Client, message: Record<string, unknown>): void {
-    if (this.state.phase !== "turing-check" || !finite(message.score) || this.turingDone.has(client.sessionId)) return;
-    const player = this.state.players.get(this.playerId(client.sessionId));
-    if (!player || player.eliminated) return;
-    this.turingDone.add(client.sessionId); // one answer per check
-    player.turingScore = clamp(Math.floor(message.score), 0, 100);
-  }
+  // ------------------------------------------------------------------ votes
 
   castVote(voterId: string, targetId: string | null): void {
     if (this.state.phase !== "voting" || this.votes.has(voterId)) return;

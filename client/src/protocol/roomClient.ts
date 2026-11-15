@@ -73,9 +73,9 @@ function friendly(error: unknown): string {
 
 export async function connect(mode: 'create' | 'join', displayName: string, code = '') {
   publish({ ...EMPTY, status: 'connecting' });
+  const client = new Client(BACKEND_URL);
   let joined: Room;
   try {
-    const client = new Client(BACKEND_URL);
     joined = mode === 'create'
       ? await client.create(ROOM_NAME, { displayName })
       : await client.joinById(code.trim(), { displayName });
@@ -83,11 +83,16 @@ export async function connect(mode: 'create' | 'join', displayName: string, code
     publish({ ...EMPTY, error: friendly(error) });
     return;
   }
-  room = joined;
   matchSelfId = '';
   chat = [];
   positions.reset();
   livePlayers = [];
+  listen(client, joined);
+}
+
+/** Makes a joined room the current one and follows its state and messages. */
+function listen(client: Client, joined: Room) {
+  room = joined;
   joined.onStateChange(receiveState);
   joined.onMessage('match_identity', (message: { playerId?: unknown }) => {
     if (room !== joined || typeof message?.playerId !== 'string' || !message.playerId) return;
@@ -102,8 +107,20 @@ export async function connect(mode: 'create' | 'join', displayName: string, code
   });
   joined.onMessage('caught', () => caught());
   joined.onError((_code, message) => publish({ ...snapshot, error: message ?? 'The server reported an error.' }));
-  joined.onLeave(() => {
+  joined.onLeave(async () => {
     if (room !== joined) return; // we left on purpose
+    // A dropped connection mid-match: the server keeps our seat for 30 seconds, so try to take it back.
+    for (let attempt = 0; attempt < 6 && snapshot.phase !== 'lobby' && room === joined; attempt++) {
+      try {
+        const back = await client.reconnect(joined.reconnectionToken);
+        if (room === joined) listen(client, back);
+        else back.leave();
+        return;
+      } catch {
+        await new Promise((resolve) => setTimeout(resolve, 3_000));
+      }
+    }
+    if (room !== joined) return;
     room = null;
     publish({ ...snapshot, status: 'disconnected', error: 'Lost the connection to the game server.' });
   });
@@ -145,10 +162,11 @@ export function live(): { players: LivePlayer[]; signal: 'green' | 'red' | null;
 export const send = {
   startMatch: () => room?.send('start_match'),
   move: (x: number, z: number) => room?.send('move', { x, z }),
-  turingResult: (score: number) => room?.send('turing_result', { score }),
   vote: (targetId: string | null) => room?.send('vote', { targetId }),
   chat: (message: string) => room?.send('chat', { message: message.slice(0, MAX_CHAT_LENGTH) }),
   /** Prompt Podium: the typed answer, and the answer picked as funniest. */
   answer: (text: string) => room?.send('answer', { text }),
   pick: (key: number) => room?.send('pick', { key }),
+  /** Glass Bridge: hop onto a panel in the next column (column 7 is the far bank). */
+  hop: (col: number, row: number) => room?.send('hop', { col, row }),
 };

@@ -7,7 +7,7 @@ import { VARIANTS } from '../assets/manifest';
 import { play } from '../audio';
 import { live, onCaught, send } from '../protocol/roomClient';
 import { clearWorldHud, setWorldHud } from '../scene/worldHud';
-import { BRIDGE, COLLISION_HEIGHT, COLLISION_WIDTH, DEPTH_SQUASH, LEVEL_FOR_GAME, LEVEL_HEIGHT, LEVEL_WIDTH, RLGL, SIDES, bankAt, loadLevel, onGround, overBridge, platformAt, toMeters, toPixels, walkable, type Level, type LevelId, type Spot } from './levels';
+import { BRIDGE, DEPTH_SQUASH, LEVEL_FOR_GAME, LEVEL_HEIGHT, LEVEL_WIDTH, RLGL, SIDES, bankAt, loadLevel, onGround, platformAt, toMeters, toPixels, walkable, type Level, type LevelId, type Spot } from './levels';
 import { ANCHOR, BODY_HEIGHT, CELL, botSheet, loadedSheetCount } from './sprites';
 
 // The game view: a batched GPU scene with a pre-rendered level and robot sprites
@@ -15,12 +15,12 @@ import { ANCHOR, BODY_HEIGHT, CELL, botSheet, loadedSheetCount } from './sprites
 //   attract - the oak level with one demo robot (landing and join screens)
 //   lobby   - the oak level with the players gathered round
 //   play    - the current mini-game's level, with the local player in control;
-//             back to the oak for the Turing check, vote and scoreboard
+//             back to the oak for the vote and scoreboard
 export type GameScene = 'attract' | 'lobby' | 'play';
 
 const WALK_SPEED = 1.5; // metres per second
 const SEND_EVERY = 1 / 15; // seconds between movement messages to the server
-const MOSS = '#10190f'; // shown only until the level's picture has loaded
+const MOSS = 0x10190f; // shown only until the level's picture has loaded
 const HOP = 0.28; // seconds in the air between two stepping stones or glass panels
 /** Centre of a glass panel from its "column:row" name. */
 const panelAt = (key: string): Spot => {
@@ -52,29 +52,7 @@ type Bot = {
   perch: string;
   hopFrom: Spot;
   hopAt: number;
-  /** The last solid ground it stood on: where it waits, at the water's edge, until it steps onto a panel. */
-  ground: Spot;
 };
-
-/** Pick a Side: a soft wash of colour over one bank's grass, so each answer has a place you can see. */
-function bankGlow(level: Level, left: boolean): Sprite {
-  const hard = document.createElement('canvas');
-  hard.width = COLLISION_WIDTH; hard.height = COLLISION_HEIGHT;
-  const ctx = hard.getContext('2d')!;
-  ctx.fillStyle = '#fff';
-  for (let y = 0; y < COLLISION_HEIGHT; y++) for (let x = 0; x < COLLISION_WIDTH; x++) {
-    if (y * 4 <= SIDES.bottom && onGround(level, x * 4, y * 4) && bankAt(x * 4, y * 4) === (left ? 'a' : 'b')) ctx.fillRect(x, y, 1, 1);
-  }
-  const soft = document.createElement('canvas');
-  soft.width = COLLISION_WIDTH; soft.height = COLLISION_HEIGHT;
-  const blur = soft.getContext('2d')!;
-  blur.filter = 'blur(2px)';
-  blur.drawImage(hard, 0, 0);
-  const sprite = new Sprite(Texture.from(soft));
-  sprite.width = LEVEL_WIDTH; sprite.height = LEVEL_HEIGHT;
-  sprite.tint = left ? 0xff3344 : 0x2f8fff;
-  return sprite;
-}
 
 export async function createGame(canvas: HTMLCanvasElement) {
   const app = new Application();
@@ -106,10 +84,7 @@ export async function createGame(canvas: HTMLCanvasElement) {
   actors.sortableChildren = true;
   let occluders: Sprite[] = [];
   let foregroundTexture: Texture | undefined;
-  // Pick a Side: the two banks, each washed in the colour of its answer card.
-  const banks = new Container();
-  let mySide = '';
-  world.addChild(background, banks, platforms, bridgeArt, actors, labels, wash);
+  world.addChild(background, platforms, bridgeArt, actors, labels, wash);
   app.stage.addChild(world);
   const fx = createFx();
   if (new URLSearchParams(location.search).has('perf')) Object.assign(window, { intrusionFx: fx.stats });
@@ -153,21 +128,24 @@ export async function createGame(canvas: HTMLCanvasElement) {
     const ratio = Math.min(devicePixelRatio, 1.5);
     app.renderer.resolution = ratio;
     app.renderer.resize(innerWidth, innerHeight);
-    view.scale = Math.max(innerWidth / LEVEL_WIDTH, innerHeight / LEVEL_HEIGHT);
   }
   addEventListener('resize', resize);
   resize();
 
-  // --- input: WASD / arrows, or click / tap the grass to walk there ---
+  // --- input: WASD / arrows, or click / tap the grass to walk there. On the bridge a click or a key press is one hop. ---
   const keys = new Set<string>();
+  /** Key presses and the click since the last frame, for games that act once per press. */
+  let taps: string[] = [];
+  let click: Spot | null = null;
   let walkTarget: Spot | null = null;
   let canWalk = false;
   const typing = (event: Event) => event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement;
-  addEventListener('keydown', (event) => { if (!typing(event)) keys.add(event.code); });
+  addEventListener('keydown', (event) => { if (!typing(event)) { keys.add(event.code); if (!event.repeat) taps.push(event.code); } });
   addEventListener('keyup', (event) => keys.delete(event.code));
   addEventListener('blur', () => keys.clear());
   canvas.addEventListener('pointerdown', (event) => {
-    if (canWalk) walkTarget = { x: (event.clientX - view.left) / view.scale, y: (event.clientY - view.top) / view.scale };
+    click = { x: (event.clientX - view.left) / view.scale, y: (event.clientY - view.top) / view.scale };
+    if (canWalk) walkTarget = click;
   });
 
   const bots = new Map<string, Bot>();
@@ -189,14 +167,17 @@ export async function createGame(canvas: HTMLCanvasElement) {
   let sawFinish = false;
   let wasCaught = false;
   onCaught(() => { wasCaught = true; });
+  /** Glass Bridge: the column the local player may hop to next (7 is the far bank), or -1 when it is not their move. */
+  let nextColumn = -1;
 
   /** Moves the local player. The server decides the light, who is caught and who has finished. */
   function stepSelf(dt: number, state: ReturnType<typeof live>, level: Level, bot: Bot, me: { x: number; z: number; finished: boolean }) {
     const playing = state.phase === 'minigame';
     const bridge = level.id === 'bridge';
-    // Nobody walks in Prompt Podium, and Pick a Side locks once the choices are counted.
-    canWalk = playing && !bot.eliminated && level.id !== 'podium' && !(level.id === 'side' && state.stage !== 'choose');
+    // Nobody walks in Prompt Podium or on the bridge, and Pick a Side locks once the choices are counted.
+    canWalk = playing && !bot.eliminated && level.id !== 'podium' && !bridge && !(level.id === 'side' && state.stage !== 'choose');
     const server = toPixels(level, me.x, me.z);
+    if (bridge) Object.assign(local, server); // on the bridge the server places everyone: a hop lands on the middle of a panel
     if (wasCaught) {
       // The server has put us back at the start: the rose saw us move, or a glass panel gave way.
       wasCaught = false;
@@ -240,17 +221,39 @@ export async function createGame(canvas: HTMLCanvasElement) {
       else walkTarget = null;
     }
 
+    // Glass Bridge: one hop per click or key press, onto a panel in the next column.
+    nextColumn = -1;
+    if (bridge && playing && !bot.eliminated && !me.finished) {
+      nextColumn = (platformAt(server.x, server.y)?.col ?? -1) + 1;
+      const last = nextColumn > 6; // on the last column: the next hop is onto the far bank
+      let row: number | undefined;
+      if (click) {
+        const panel = platformAt(click.x, click.y);
+        if (last ? click.x > BRIDGE.right - BRIDGE.columnWidth : panel?.col === nextColumn) row = panel?.row ?? 0;
+        else if (panel) { result = 'One hop at a time: click a panel in the next column.'; resultUntil = time + 2.5; }
+      }
+      for (const code of taps) {
+        if (code === 'KeyW' || code === 'ArrowUp') row = 1;
+        else if (code === 'KeyS' || code === 'ArrowDown') row = 0;
+        else if (last && (code === 'KeyD' || code === 'ArrowRight')) row = 0;
+      }
+      if (row !== undefined && !last && state.broken.split(',').includes(`${nextColumn}:${row}`)) { result = 'That panel is gone.'; resultUntil = time + 2; }
+      else if (row !== undefined) send.hop(nextColumn, row);
+    }
+
     if (state.signal && state.signal !== lastSignal) play(state.signal === 'green' ? 'go' : 'stop');
     lastSignal = state.signal;
     let objective = '';
     if (bot.eliminated) objective = 'You were voted out. You can still watch.';
     else if (level.id === 'podium') objective = ''; // the answer panel says what to do
     else if (level.id === 'side') {
-      objective = !playing ? 'Read the question. The red bank on the left is one answer, the blue bank on the right is the other.'
-        : state.stage === 'choose' ? 'Hop across the stones to the bank of your answer before time runs out.' : 'Choices are locked in.';
+      objective = !playing ? 'Read the question. Red is one answer, blue is the other.'
+        : state.stage === 'choose' ? 'Cross the stones to the red or the blue platform before time runs out.' : 'Choices are locked in.';
     } else if (bridge) {
-      objective = !playing ? 'Memorise the lit panels. They go dark when you start.'
-        : me.finished ? 'You crossed. Watch who remembers, and who guesses.' : 'Cross on the panels that were lit.';
+      objective = !playing ? 'Memorise the lit panels. When they go dark, click a panel to hop onto it.'
+        : me.finished ? 'You crossed. Watch who remembers, and who guesses.'
+        : nextColumn > 6 ? 'Last hop: click the far bank, or press D.'
+        : 'Click a panel in the next column to hop onto it. Keys: W for the far panel, S for the near one.';
     } else if (!playing) objective = 'Get ready. Run when the rose opens.';
     else if (me.finished) objective = 'You made it. Watch who else does, and how.';
     else if (local.x <= RLGL.startX) objective = 'Cross the roses and run for the far side.';
@@ -266,10 +269,9 @@ export async function createGame(canvas: HTMLCanvasElement) {
       sendTimer = 0;
     }
     if (time > resultUntil) result = '';
-    // Pick a Side: which bank we are on, by the same lines the server counts with.
-    const side = level.id !== 'side' || bot.eliminated ? '' : bankAt(local.x, local.y);
-    mySide = side;
-    setWorldHud({ objective, distance: 0, bearing: null, signal: playing ? state.signal : null, result, scored: me.finished, side });
+    // Pick a Side: which platform we are on, by the same line the server counts with.
+    const side = level.id !== 'side' || bot.eliminated ? '' : bankAt(local.x);
+    setWorldHud({ objective, signal: playing ? state.signal : null, result, side });
   }
 
   function drawBot(bot: Bot, level: Level) {
@@ -359,7 +361,7 @@ export async function createGame(canvas: HTMLCanvasElement) {
     const key = `${scene}:${levelId}:${state.round}`;
     const fresh = key !== levelKey;
     levelKey = key;
-    if (!free) { canWalk = false; walkTarget = null; if (fresh) clearWorldHud(); }
+    if (!free) { canWalk = false; walkTarget = null; nextColumn = -1; if (fresh) clearWorldHud(); }
 
     const roster = scene === 'attract'
       ? VARIANTS.slice(0, 1).map((look, i) => ({ id: `demo-${i}`, name: '', look: look.id as string, x: 0, z: 0, eliminated: false, finished: false }))
@@ -376,7 +378,7 @@ export async function createGame(canvas: HTMLCanvasElement) {
     roster.forEach((player, index) => {
       let bot = bots.get(player.id);
       if (!bot) {
-        bot = { look: player.look, name: player.name, x: 0, y: 0, facing: 'front', flip: false, moving: false, movingUntil: 0, eliminated: false, isSelf: false, placed: false, emote: '', emoteUntil: 0, offset: index * 1.37, shown: { x: 0, y: 0 }, lift: 0, perch: '', hopFrom: { x: 0, y: 0 }, hopAt: -Infinity, ground: { x: 0, y: 0 } };
+        bot = { look: player.look, name: player.name, x: 0, y: 0, facing: 'front', flip: false, moving: false, movingUntil: 0, eliminated: false, isSelf: false, placed: false, emote: '', emoteUntil: 0, offset: index * 1.37, shown: { x: 0, y: 0 }, lift: 0, perch: '', hopFrom: { x: 0, y: 0 }, hopAt: -Infinity };
         bots.set(player.id, bot);
       }
       bot.look = player.look;
@@ -411,22 +413,21 @@ export async function createGame(canvas: HTMLCanvasElement) {
       } else if (!free) bot.facing = 'front'; // gathered round the oak, facing us
 
       // Nobody wades. Over water a robot is always drawn standing on something, and jumps from one
-      // footing to the next: the nearest stepping stone in Pick a Side; on the bridge, the glass panel
-      // it last stepped onto, or the bank until it steps onto one.
+      // footing to the next: the nearest stepping stone in Pick a Side, its glass panel on the bridge.
       let rest: Spot = bot;
       let perch = '';
-      if (free && level.id === 'side' && !onGround(level, bot.x, bot.y)) {
+      const panel = free && level.id === 'bridge' ? platformAt(bot.x, bot.y) : null;
+      if (panel) {
+        rest = panel;
+        perch = panel.key;
+      } else if (free && level.id === 'side' && !onGround(level, bot.x, bot.y)) {
         const stone = SIDES.stones.reduce((best, each) => (Math.abs(each[0] - bot.x) < Math.abs(best[0] - bot.x) ? each : best));
-        rest = { x: stone[0] + ((index % 3) - 1) * 28, y: stone[1] + (index % 2) * 10 - 5 }; // a little apart when several share a stone
+        rest = { x: stone[0] + ((index % 3) - 1) * 14, y: stone[1] + (index % 2) * 8 - 4 }; // a little apart when several share a stone
         perch = String(stone[0]);
-      } else if (free && level.id === 'bridge' && overBridge(level, bot.x, bot.y)) {
-        // Between panels it is still on the last one; the server, too, only counts the middle of a panel.
-        perch = platformAt('bridge', bot.x, bot.y)?.key ?? bot.perch;
-        rest = perch ? panelAt(perch) : bot.ground;
-      } else bot.ground = { x: bot.x, y: bot.y };
+      }
       if (perch !== bot.perch) {
         // A jump, unless it is too far to be one (sent back to the bank after a fall).
-        if (!fresh && bot.placed && Math.hypot(rest.x - bot.shown.x, rest.y - bot.shown.y) < 245) {
+        if (!fresh && bot.placed && Math.hypot(rest.x - bot.shown.x, rest.y - bot.shown.y) < 300) {
           bot.hopFrom = { ...bot.shown };
           bot.hopAt = time;
           if (perch) ripples.push({ x: rest.x, y: rest.y, from: time + HOP }); // the footing takes the weight as it lands
@@ -446,16 +447,22 @@ export async function createGame(canvas: HTMLCanvasElement) {
       bot.placed = true;
     });
 
+    taps = []; click = null;
+
     // Follow the local player on a mini-game level. Under the oak, and while everyone memorises the
-    // bridge (all seven columns should be in view), frame the middle of the level instead.
+    // bridge (all seven columns should be in view), frame the middle of the level instead. Pick a Side
+    // always shows its whole width, both platforms: the level shrinks to fit a narrow window, with pond above and below.
     const self = [...bots.values()].find((bot) => bot.isSelf);
-    const overview = !free || !self || (level.id === 'bridge' && state.phase === 'travel');
+    const whole = free && level.id === 'side';
+    view.scale = whole ? innerWidth / LEVEL_WIDTH : Math.max(innerWidth / LEVEL_WIDTH, innerHeight / LEVEL_HEIGHT);
+    app.renderer.background.color = whole ? SIDES.water : MOSS;
+    const overview = !free || !self || whole || (level.id === 'bridge' && state.phase === 'travel');
     const focus = overview ? { x: LEVEL_WIDTH / 2, y: LEVEL_HEIGHT / 2 } : self.shown;
     const ease = fresh ? 1 : Math.min(1, dt * 4);
     camera.x += (focus.x - camera.x) * ease;
     camera.y += (focus.y - camera.y) * ease;
     view.left = Math.min(0, Math.max(innerWidth - LEVEL_WIDTH * view.scale, innerWidth / 2 - camera.x * view.scale));
-    view.top = Math.min(0, Math.max(innerHeight - LEVEL_HEIGHT * view.scale, innerHeight / 2 - camera.y * view.scale));
+    view.top = whole ? (innerHeight - LEVEL_HEIGHT * view.scale) / 2 : Math.min(0, Math.max(innerHeight - LEVEL_HEIGHT * view.scale, innerHeight / 2 - camera.y * view.scale));
     world.scale.set(view.scale); world.position.set(view.left, view.top);
     if (drawnLevel !== level) {
       backgroundTexture?.destroy(true);
@@ -467,8 +474,6 @@ export async function createGame(canvas: HTMLCanvasElement) {
       for (const sprite of occluders) sprite.destroy({ texture: true });
       foregroundTexture?.destroy(true);
       foregroundTexture = level.foreground && level.id !== 'oak' && level.id !== 'podium' ? Texture.from(level.foreground) : undefined;
-      for (const bank of banks.removeChildren()) bank.destroy({ texture: true, textureSource: true });
-      if (level.id === 'side') banks.addChild(bankGlow(level, true), bankGlow(level, false));
       occluders = !foregroundTexture ? [] : level.occluders.map((box) => {
         const sprite = new Sprite(new Texture({ source: foregroundTexture!.source, frame: new Rectangle(box.x, box.y, box.width, box.height) }));
         sprite.position.set(box.x, box.y);
@@ -515,9 +520,16 @@ export async function createGame(canvas: HTMLCanvasElement) {
       const { x, y } = panelAt(key);
       platforms.roundRect(x - BRIDGE.panelWidth / 2 - 6, y - BRIDGE.panelHeight / 2 - 6, BRIDGE.panelWidth + 12, BRIDGE.panelHeight + 14, 6).fill(0x2f7090);
     }
-    // Pick a Side: each bank glows in its answer's colour, brighter for the one we are standing on.
-    banks.visible = free && level.id === 'side';
-    banks.children.forEach((bank, i) => { bank.alpha = (mySide === 'ab'[i] ? 0.5 : 0.26) + Math.sin(time * 3) * 0.04; });
+    // Where the local player can hop next: both panels of the next column, or the far bank.
+    if (onBridge && nextColumn >= 0) {
+      const glow = { width: 5, color: 0xffffff, alpha: 0.55 + Math.sin(time * 5) * 0.3 };
+      if (nextColumn > 6) platforms.ellipse(BRIDGE.right + 100, BRIDGE.rowSplit, 70, 70 * DEPTH_SQUASH).stroke(glow);
+      else for (const row of [0, 1]) {
+        if (state.broken.split(',').includes(`${nextColumn}:${row}`)) continue;
+        const { x, y } = panelAt(`${nextColumn}:${row}`);
+        platforms.roundRect(x - BRIDGE.panelWidth / 2, y - BRIDGE.panelHeight / 2, BRIDGE.panelWidth, BRIDGE.panelHeight, 8).stroke(glow);
+      }
+    }
     for (const ripple of ripples) {
       const age = (time - ripple.from) / 0.7; // 0 as the robot steps on, 1 when the ring has faded
       if (age < 0) continue; // still in the air
@@ -538,6 +550,8 @@ export async function createGame(canvas: HTMLCanvasElement) {
   return {
     setScene(next: GameScene) {
       if (next === scene) return;
+      // Fetch every mini-game's picture while people wait in the lobby, not as its round is announced.
+      if (next === 'lobby') for (const id of Object.values(LEVEL_FOR_GAME)) getLevel(id);
       scene = next;
       levelKey = '';
       keys.clear();

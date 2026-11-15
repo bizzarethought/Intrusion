@@ -11,7 +11,7 @@ const str = (value: unknown, fallback = '') => (typeof value === 'string' ? valu
 const bool = (value: unknown, fallback = false) => (typeof value === 'boolean' ? value : fallback);
 
 /** The bot's identity may only be shown once the server says the match is over. */
-export const isRevealPhase = (phase: string) => phase === 'reveal' || phase === 'game-over';
+export const isRevealPhase = (phase: string) => phase === 'reveal';
 
 function eachPlayer(state: unknown, visit: (id: string, player: Raw) => void) {
   const players = asRecord(state).players as { forEach?: (fn: (value: unknown, key: string) => void) => void } | undefined;
@@ -29,7 +29,6 @@ export function mapState(state: unknown) {
       name: str(p.displayName, 'Player'),
       realName: isRevealPhase(phase) ? str(p.realName) || undefined : undefined,
       score: num(p.score),
-      turingScore: num(p.turingScore),
       connected: bool(p.connected, true),
       eliminated: bool(p.eliminated),
       finished: bool(p.finished),

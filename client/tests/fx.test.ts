@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { insidePolygon, pingPongFrame, rosePose, idleRoseFrame } from '../src/game/fxMath';
+import { pingPongFrame, rosePose, idleRoseFrame } from '../src/game/fxMath';
 
 test('water ping-pongs without an endpoint pause and stays in bounds', () => {
   assert.deepEqual(Array.from({ length: 9 }, (_, i) => pingPongFrame(i, 1, 3)), [0, 1, 2, 1, 0, 1, 2, 1, 0]);
@@ -16,13 +16,6 @@ test('rose closes within reaction grace and reverses from its current pose', () 
   assert.equal(rosePose(0.2, true, 0, true), 1);
   assert.equal(rosePose(0.8, false, 0, true), 0);
 });
-test('water masks contain ponds but exclude adjacent ground', () => {
-  const pond = [100, 100, 200, 100, 200, 200, 100, 200];
-  assert.equal(insidePolygon(150, 150, pond), true);
-  assert.equal(insidePolygon(90, 150, pond), false);
-  assert.equal(insidePolygon(150, 210, pond), false);
-});
-
 test('idle rose traverses the actual petal frames with rests at both endpoints', () => {
   assert.equal(idleRoseFrame(0.5, 10), 0);
   assert.equal(idleRoseFrame(1.5, 10), 5);

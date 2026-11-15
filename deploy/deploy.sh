@@ -15,8 +15,9 @@ rsync -az --delete -e "$SSH" client/dist/ "$REMOTE:/var/www/intrusion/"
 # Game server: compiled JavaScript plus its package list; dependencies install on the server.
 (cd server && npm install --no-audit --no-fund && npm test && npm run build)
 rsync -az --delete -e "$SSH" server/dist server/package.json server/package-lock.json "$REMOTE:/opt/intrusion/"
-# The AI key travels in .env, straight to the server, never through git.
-scp -q -i "$KEY" server/.env "$REMOTE:/opt/intrusion/.env"
+# The AI key travels in .env, straight to the server, never through git. A fixed MINI_GAMES order is
+# for testing on a laptop, so it stays behind: the live game always shuffles.
+grep -v '^MINI_GAMES=' server/.env | $SSH "$REMOTE" 'cat > /opt/intrusion/.env'
 
 rsync -az -e "$SSH" deploy/nginx.conf "$REMOTE:/tmp/intrusion.nginx"
 $SSH "$REMOTE" '
@@ -32,6 +33,8 @@ $SSH "$REMOTE" '
     sudo ln -sf /etc/nginx/sites-available/intrusion /etc/nginx/sites-enabled/intrusion
     sudo rm -f /etc/nginx/sites-enabled/default
   fi
+  # The installed site once told browsers to keep art for a week without asking. Ask every visit instead.
+  sudo sed -i -e "s/expires 7d;/add_header Cache-Control \"no-cache\";/" -e "/add_header Cache-Control \"public\";/d" /etc/nginx/sites-available/intrusion
   sudo nginx -t && sudo systemctl reload nginx
 '
 echo "Deployed. Frontend: http://play-intrusion.us   Game server: server.play-intrusion.us"

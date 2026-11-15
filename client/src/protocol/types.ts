@@ -15,53 +15,38 @@ export const PHASE_LABELS: Record<string, string> = {
   loading: 'Loading',
   travel: 'Get ready',
   minigame: 'Mini-game',
-  'turing-check': 'Turing check',
   voting: 'Vote',
   scoreboard: 'Scoreboard',
   reveal: 'Reveal',
-  'game-over': 'Game over',
 };
 
 export type MiniGame = {
   name: string;
   how: string;
-  reveals: string;
-  /** Accent colour for the arena, sign and UI. */
-  color: string;
 };
 
 export const MINI_GAMES: Record<string, MiniGame> = {
   'red-light-green-light': {
     name: 'Red Light, Green Light',
     how: 'Sprint to the finish. Move on red and you go back to the start.',
-    reveals: 'Reaction timing',
-    color: '#ff4d6d',
   },
   'pick-a-side': {
     name: 'Pick a Side',
-    how: 'A would-you-rather. Walk to the bank you choose before time runs out.',
-    reveals: 'Decisions and crowd-following',
-    color: '#4dd2ff',
+    how: 'A would-you-rather. Walk to the red or the blue platform before time runs out.',
   },
   'prompt-podium': {
     name: 'Prompt Podium',
     how: 'Type an answer, then vote for the funniest one.',
-    reveals: 'Humour and typing rhythm',
-    color: '#ffd24d',
   },
   'glass-bridge-memory': {
     name: 'Glass Bridge Memory',
-    how: 'Safe panels flash once. Cross from memory; a wrong panel drops you back.',
-    reveals: 'Memory and accuracy',
-    color: '#9b7bff',
+    how: 'Safe panels flash once. Then click the next panel to hop onto it. A wrong one drops you back.',
   },
 };
 
 export const UNKNOWN_MINI_GAME: MiniGame = {
   name: 'Mystery arena',
   how: 'This mini-game is new to this version of the game.',
-  reveals: 'Unknown',
-  color: '#ffffff',
 };
 
 export const miniGameInfo = (id: string): MiniGame => MINI_GAMES[id] ?? UNKNOWN_MINI_GAME;
@@ -72,8 +57,6 @@ export type Player = {
   /** Original lobby name, only available after the final reveal. */
   realName?: string;
   score: number;
-  /** 0-100, higher looks more human. A clue, not a verdict. */
-  turingScore: number;
   connected: boolean;
   eliminated: boolean;
   /** Has crossed the finish line in the current mini-game. */

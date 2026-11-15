@@ -13,7 +13,8 @@ export type Spot = { x: number; y: number };
 
 export type Level = {
   id: LevelId;
-  image: HTMLImageElement;
+  /** The level's picture: a rendered image, or for Pick a Side one drawn here. */
+  image: HTMLImageElement | HTMLCanvasElement;
   pixelsPerMeter: number;
   /** How tall a robot's body is drawn on this level. */
   botHeight: number;
@@ -55,50 +56,102 @@ export const BRIDGE = {
   bottom: 618,
   panelWidth: 124,
   panelHeight: 86,
-  /** How far left of the glass a player may reach from the bank: the grass does not touch the near row, so this is the step onto it. */
-  apron: 75,
 };
 
-/** Glass Bridge: true over the water between the banks, where a robot is on a panel or about to step onto one. */
-export function overBridge(level: Level, x: number, y: number): boolean {
-  if (x >= BRIDGE.right || y < BRIDGE.top || y > BRIDGE.bottom) return false;
-  return x >= BRIDGE.left || (x >= BRIDGE.left - BRIDGE.apron && !onGround(level, x, y));
+/** The glass panel under a point, if any: its column, row, name and centre. Every point over the bridge belongs to one. */
+export function platformAt(x: number, y: number): { col: number; row: number; key: string; x: number; y: number } | null {
+  if (x < BRIDGE.left || x >= BRIDGE.right || y < BRIDGE.top || y > BRIDGE.bottom) return null;
+  const col = Math.min(6, Math.floor((x - BRIDGE.left) / BRIDGE.columnWidth));
+  const row = y < BRIDGE.rowSplit ? 1 : 0;
+  return { col, row, key: `${col}:${row}`, x: BRIDGE.firstX + col * BRIDGE.columnWidth, y: BRIDGE.rowY[row] };
 }
 
 /**
- * Pick a Side: the red bank on the left, the blue bank on the right, and one row of stepping
- * stones across the pond between (from leftX to rightX). Nothing below `bottom` is in play, so
- * the stones are the only way across, and any grass a robot stands on belongs to one bank or the
- * other. Mirrors SIDES in server/src/game/minigames.ts.
+ * Pick a Side: three platforms in a pond. Red on the left and blue on the right are the two
+ * answers; everyone starts on the grass one in the middle, and a line of stepping stones joins
+ * them. Mirrors SIDES in server/src/game/minigames.ts.
  */
 export const SIDES = {
-  leftX: 745,
-  rightX: 1672,
-  stonesTop: 440,
-  stonesBottom: 545,
-  bottom: 720,
-  stones: [[700, 480], [900, 470], [1105, 490], [1310, 505], [1512, 478]],
+  red: { x: 90, y: 470, width: 480, height: 440 },
+  blue: { x: 1350, y: 470, width: 480, height: 440 },
+  middle: { x: 770, y: 500, width: 380, height: 340 },
+  pathY: 670,
+  stones: [[620, 670], [720, 670], [1200, 670], [1300, 670]],
+  /** The back of each coloured platform is kept clear, so a name tag never hides behind the answer sign above it. */
+  signStrip: 100,
+  water: 0x2f8fc2, // the pond, also shown above and below the level in a tall window
 };
 
-/** The glass panel under a point, if any: its name and centre. */
-export function platformAt(level: LevelId, x: number, y: number): { key: string; x: number; y: number } | null {
-  if (level === 'bridge' && x >= BRIDGE.left && x < BRIDGE.right && y >= BRIDGE.top && y <= BRIDGE.bottom) {
-    const col = Math.min(6, Math.floor((x - BRIDGE.left) / BRIDGE.columnWidth));
-    const row = y < BRIDGE.rowSplit ? 1 : 0;
-    const centre = { x: BRIDGE.firstX + col * BRIDGE.columnWidth, y: BRIDGE.rowY[row] };
-    // Only the middle of a panel counts as standing on it, as on the server.
-    return Math.abs(x - centre.x) < BRIDGE.columnWidth * 0.36 && Math.abs(y - centre.y) < 34 ? { key: `${col}:${row}`, ...centre } : null;
-  }
-  return null;
+/** Pick a Side: the platform a position counts for ('a' red, 'b' blue), or '' in the middle or on the stones. Same test as the server's sideOf. */
+export function bankAt(x: number): '' | 'a' | 'b' {
+  return x < SIDES.red.x + SIDES.red.width ? 'a' : x > SIDES.blue.x ? 'b' : '';
 }
 
 /**
- * Pick a Side: the bank a player's position counts for ('a' left, 'b' right), or '' on the stones.
- * The same test as the server's sideOf: off the row of stones, left of the middle stone is the left bank.
+ * Pick a Side is drawn here, not rendered: the art pass had one pond with uneven banks, and the
+ * game needs two clear places to stand. The platforms and stones are cut from that picture's own
+ * grass and stones, so it still belongs with the other levels.
  */
-export function bankAt(x: number, y: number): '' | 'a' | 'b' {
-  const onStones = x > SIDES.leftX && x < SIDES.rightX && y > SIDES.stonesTop && y < SIDES.stonesBottom;
-  return onStones ? '' : x < SIDES.stones[2][0] ? 'a' : 'b';
+function sideBoard(art: HTMLImageElement): Pick<Level, 'image' | 'collision' | 'foreground' | 'occluders'> {
+  const image = document.createElement('canvas');
+  image.width = LEVEL_WIDTH; image.height = LEVEL_HEIGHT;
+  const ctx = image.getContext('2d')!;
+  const water = ctx.createLinearGradient(0, 0, 0, LEVEL_HEIGHT);
+  // The top and bottom edges match SIDES.water, which fills the rest of a tall window.
+  water.addColorStop(0, '#2f8fc2'); water.addColorStop(0.45, '#46a8d6'); water.addColorStop(1, '#2f8fc2');
+  ctx.fillStyle = water; ctx.fillRect(0, 0, LEVEL_WIDTH, LEVEL_HEIGHT);
+
+  // The picture's own grass, laid down as soft overlapping patches, so it never repeats in a pattern.
+  const patch = document.createElement('canvas');
+  patch.width = 160; patch.height = 120;
+  const patchCtx = patch.getContext('2d')!;
+  let seed = 11;
+  const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const platform = ({ x, y, width, height }: typeof SIDES.red, colour: string | null, side: string) => {
+    ctx.fillStyle = side; // the platform's edge, so it stands out of the water
+    ctx.beginPath(); ctx.roundRect(x, y + 22, width, height, 26); ctx.fill();
+    ctx.save();
+    ctx.beginPath(); ctx.roundRect(x, y, width, height, 26); ctx.clip();
+    ctx.fillStyle = '#3d6a22'; ctx.fillRect(x, y, width, height);
+    for (let i = 0; i < (width * height) / 1400; i++) {
+      patchCtx.globalCompositeOperation = 'source-over';
+      patchCtx.clearRect(0, 0, 160, 120);
+      patchCtx.drawImage(art, 520 + random() * 140, 70 + random() * 110, 160, 120, 0, 0, 160, 120);
+      const fade = patchCtx.createRadialGradient(80, 60, 25, 80, 60, 80);
+      fade.addColorStop(0, '#000'); fade.addColorStop(1, 'transparent');
+      patchCtx.globalCompositeOperation = 'destination-in';
+      patchCtx.fillStyle = fade; patchCtx.fillRect(0, 0, 160, 120);
+      ctx.drawImage(patch, x - 80 + random() * width, y - 60 + random() * height);
+    }
+    if (colour) {
+      // The grass keeps its blades and light, and takes the answer's colour.
+      ctx.globalCompositeOperation = 'color'; ctx.fillStyle = colour; ctx.fillRect(x, y, width, height);
+      ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 0.45; ctx.fillRect(x, y, width, height);
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+    ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.roundRect(x + 4, y + 4, width - 8, height - 8, 22); ctx.stroke();
+  };
+  platform(SIDES.red, '#e8232f', '#6e1016');
+  platform(SIDES.blue, '#2468f2', '#102c78');
+  platform(SIDES.middle, null, '#3b2a18');
+  // The picture's second stepping stone (a short cylinder at 902, 455), stamped along the path.
+  for (const [x, y] of SIDES.stones) {
+    ctx.save();
+    ctx.translate(x, y); ctx.scale(0.62, 0.62);
+    ctx.beginPath(); ctx.ellipse(0, 0, 68, 39, 0, Math.PI, 0); ctx.lineTo(68, 26); ctx.ellipse(0, 26, 68, 39, 0, 0, Math.PI); ctx.closePath();
+    ctx.clip();
+    ctx.drawImage(art, 902 - 80, 455 - 50, 160, 130, -80, -50, 160, 130);
+    ctx.restore();
+  }
+  const collision = new Uint8Array(COLLISION_WIDTH * COLLISION_HEIGHT);
+  for (const { x, y, width, height } of [SIDES.red, SIDES.blue, SIDES.middle]) {
+    // A little inside the edge, so nobody stands half off a platform.
+    const top = y + (y === SIDES.middle.y ? 12 : SIDES.signStrip);
+    for (let row = Math.ceil(top / 4); row < (y + height - 12) / 4; row++) collision.fill(1, row * COLLISION_WIDTH + Math.ceil((x + 16) / 4), row * COLLISION_WIDTH + Math.floor((x + width - 16) / 4));
+  }
+  return { image, collision, foreground: null, occluders: [] };
 }
 
 /** Solid ground by the level's collision map: white is ground; black is water, boulders and trunks. */
@@ -108,17 +161,12 @@ export function onGround(level: Level, x: number, y: number): boolean {
   return level.collision[Math.floor(y / 4) * COLLISION_WIDTH + Math.floor(x / 4)] === 1;
 }
 
-/** Where the local player may move to. */
+/** Where the local player may walk to. (Nobody walks on the bridge or at the podium.) */
 export function walkable(level: Level, x: number, y: number): boolean {
   // Keep the whole robot and its name in the picture.
   if (x < 30 || x > LEVEL_WIDTH - 30 || y < 250 || y > LEVEL_HEIGHT - 60) return false;
-  if (level.id === 'side') {
-    if (y > SIDES.bottom) return false;
-    // The row of stepping stones crosses the pond, which the map marks as water. A robot in this
-    // strip is drawn on the nearest stone (see the game view), never in the water.
-    if (x >= 640 && x <= SIDES.rightX + 20 && y > SIDES.stonesTop && y < SIDES.stonesBottom) return true;
-  }
-  if (level.id === 'bridge' && overBridge(level, x, y)) return true;
+  // The line of stepping stones crosses open water. A robot on it is drawn on the nearest stone (see the game view).
+  if (level.id === 'side' && Math.abs(y - SIDES.pathY) < 40 && x > SIDES.red.x + SIDES.red.width - 20 && x < SIDES.blue.x + 20) return true;
   return onGround(level, x, y);
 }
 
@@ -130,13 +178,15 @@ type LevelFile = {
   watcher_rose?: { centre_px?: [number, number] };
 };
 const cache = new Map<LevelId, Promise<Level>>();
+/** Browsers were told to keep level files for a week. Change this when the art changes, so they fetch the new files. */
+const VERSION = '?v=3';
 
 /** An image from the levels folder, or null if it is missing (older art has no foreground or collision map). */
 const picture = (name: string) => new Promise<HTMLImageElement | null>((resolve) => {
   const img = new Image();
   img.onload = () => resolve(img);
   img.onerror = () => resolve(null);
-  img.src = `/assets/levels/${name}`;
+  img.src = `/assets/levels/${name}${VERSION}`;
 });
 
 export function loadLevel(id: LevelId): Promise<Level> {
@@ -144,8 +194,9 @@ export function loadLevel(id: LevelId): Promise<Level> {
   if (!pending) {
     pending = (async () => {
       const [file, image, foreground, map] = await Promise.all([
-        fetch(`/assets/levels/${id}.json`).then((response) => response.json() as Promise<LevelFile>),
-        picture(`${id}_bg.png`),
+        fetch(`/assets/levels/${id}.json${VERSION}`).then((response) => response.json() as Promise<LevelFile>),
+        // Backgrounds ship as JPEG, a sixth of the size; a PNG straight from the art pass still works.
+        picture(`${id}_bg.jpg`).then((jpeg) => jpeg ?? picture(`${id}_bg.png`)),
         picture(`${id}_fg.png`),
         picture(`${id}_collision.png`),
       ]);
@@ -172,9 +223,11 @@ export function loadLevel(id: LevelId): Promise<Level> {
         id, image, foreground, occluders, collision,
         pixelsPerMeter: file.pixels_per_meter ?? 270, botHeight: file.bot_height_px ?? 165, spawns,
         watcher: rose ? { x: rose[0], y: rose[1] } : null,
+        ...(id === 'side' ? sideBoard(image) : {}),
       };
     })();
     cache.set(id, pending);
+    pending.catch(() => cache.delete(id)); // a failed download is tried again, not remembered
   }
   return pending;
 }

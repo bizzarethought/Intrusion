@@ -6,7 +6,6 @@ import { PodiumPanel, SidePanel } from '../components/MiniGamePanels';
 import { PhaseBanner } from '../components/PhaseBanner';
 import { Scoreboard } from '../components/Scoreboard';
 import { SettingsPanel } from '../components/SettingsPanel';
-import { TuringCheckPanel } from '../components/TuringCheckPanel';
 import { useCountdown } from '../hooks/useCountdown';
 import { leave } from '../protocol/roomClient';
 import type { Snapshot } from '../protocol/types';
@@ -50,8 +49,8 @@ export function GameScreen({ game }: { game: Snapshot }) {
   const { gains, votedOut } = useRoundTracker(game);
   const toggle = (panel: typeof open) => setOpen((now) => (now === panel ? null : panel));
   const moving = game.phase === 'travel' || game.phase === 'minigame';
-  const ended = game.phase === 'reveal' || game.phase === 'game-over';
-  const known = moving || ended || ['loading', 'turing-check', 'voting', 'scoreboard'].includes(game.phase);
+  const ended = game.phase === 'reveal';
+  const known = moving || ended || ['loading', 'voting', 'scoreboard'].includes(game.phase);
   // Chat is on screen during the vote and when its panel is open.
   const chatVisible = open === 'chat' || game.phase === 'voting';
 
@@ -78,7 +77,6 @@ export function GameScreen({ game }: { game: Snapshot }) {
       {moving && <Countdown game={game} />}
       {moving && game.miniGame === 'pick-a-side' && <SidePanel game={game} />}
       {moving && game.miniGame === 'prompt-podium' && <PodiumPanel key={game.round} game={game} />}
-      {game.phase === 'turing-check' && <TuringCheckPanel endsAt={game.phaseEndsAt} />}
       {game.phase === 'voting' && <VotingScreen key={game.round} game={game} />}
       {game.phase === 'scoreboard' && <Scoreboard game={game} gains={gains} votedOut={votedOut} final />}
       {!known && (

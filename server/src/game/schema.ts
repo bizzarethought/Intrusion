@@ -13,8 +13,6 @@ export class PlayerState extends Schema {
   @type("number") x = 0;
   @type("number") z = 0;
   @type("number") score = 0;
-  /** 0-100, higher looks more human. A clue for the sus meter, not a verdict. */
-  @type("number") turingScore = 0;
   @type("boolean") connected = true;
   @type("boolean") eliminated = false;
   /** Has crossed the finish line in the current mini-game. */

@@ -148,6 +148,7 @@ function grassy(level: Level, land: ReturnType<typeof survey>, x: number, y: num
   if (!land.all(land.green, [[x, y], [x - 36, y], [x + 36, y], [x, y - 20], [x, y + 20]])) return false;
   if (level.id === 'oak') return y > 760 || (x < 330 && y > 130) || (x > 780 && x < 1030 && y > 180 && y < 430);
   if (level.id === 'rlgl') return !(x > 100 && x < 1560 && y > 440 && y < 840); // keep the course clear
+  if (level.id === 'side') return false; // the middle platform is where everyone stands
   return true;
 }
 

@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { play } from '../audio';
 import { ChatPanel } from '../components/ChatPanel';
-import { clueFor } from '../components/clue';
 import { PlayerCard } from '../components/PlayerCard';
 import { useCountdown } from '../hooks/useCountdown';
 import { send } from '../protocol/roomClient';
@@ -40,7 +39,6 @@ export function VotingScreen({ game }: { game: Snapshot }) {
                   <PlayerCard player={player} selfId={game.selfId} size={92} frame={choice === player.id ? 'emote_sus' : undefined}
                     selected={choice === player.id} disabled={locked || player.id === game.selfId} onClick={() => { setChoice(player.id); play('click'); }}>
                     <span className="card__meta">{player.score} pts</span>
-                    {game.round > 0 && <span className={`clue clue--${clueFor(player).id}`} title="A clue, not a verdict">{clueFor(player).label}</span>}
                   </PlayerCard>
                 </li>
               ))}

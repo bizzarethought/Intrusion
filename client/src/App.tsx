@@ -30,7 +30,7 @@ export function App({ game: view }: { game: Game }) {
   useEffect(() => {
     if (!connected) setMusic('menu');
     else if (inLobby) setMusic('lobby');
-    else if (watchingIntro || game.phase === 'reveal' || game.phase === 'game-over') setMusic(null);
+    else if (watchingIntro || game.phase === 'reveal') setMusic(null);
     else setMusic(game.phase === 'voting' ? 'voting' : 'minigame');
   }, [connected, inLobby, watchingIntro, game.phase]);
 

@@ -14,15 +14,6 @@ export function rosePose(current: number, open: boolean, dt: number, reducedMoti
   return current < target ? Math.min(target, current + step) : Math.max(target, current - step);
 }
 
-export function insidePolygon(x: number, y: number, points: readonly number[]): boolean {
-  let inside = false;
-  for (let i = 0, j = points.length - 2; i < points.length; j = i, i += 2) {
-    const ax = points[i], ay = points[i + 1], bx = points[j], by = points[j + 1];
-    if ((ay > y) !== (by > y) && x < ((bx - ax) * (y - ay)) / (by - ay) + ax) inside = !inside;
-  }
-  return inside;
-}
-
 /** Idle flower: hold closed, open for a second, rest open, then close for a second. */
 export function idleRoseFrame(time: number, count: number): number {
   const phase = Math.max(0, time) % 8;

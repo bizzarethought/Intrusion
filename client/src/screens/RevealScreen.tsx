@@ -8,7 +8,6 @@ import { useEffect } from 'react';
 
 const average = (players: Player[], pick: (player: Player) => number) =>
   players.length ? Math.round(players.reduce((sum, player) => sum + pick(player), 0) / players.length) : 0;
-const lowest = (players: Player[], pick: (player: Player) => number) => [...players].sort((a, b) => pick(a) - pick(b))[0];
 
 /**
  * The end of the match. `isBot` is only present because the server has reached
@@ -21,12 +20,7 @@ export function RevealScreen({ game }: { game: Snapshot }) {
   const caught = game.winner ? game.winner === 'humans' : Boolean(bot?.eliminated);
   useEffect(() => { const glitch = playGlitch(); return () => glitch?.pause(); }, []);
 
-  const awards: Array<{ title: string; winner?: Player; why: string }> = [
-    { title: 'Most Human Bot', winner: bot, why: bot ? `Passed as ${bot.turingScore}% human` : '' },
-    { title: 'Most Robotic Human', winner: lowest(humans, (p) => p.turingScore), why: 'Lowest Turing check among the humans' },
-    { title: 'Best Bluff', winner: lowest(survivors, (p) => p.turingScore), why: 'Looked suspicious and still survived' },
-    { title: 'Sharpest Detective', winner: lowest(humans, (p) => -p.score), why: 'Top score among the humans' },
-  ];
+  const detective = [...humans].sort((a, b) => b.score - a.score)[0];
 
   return (
     <div className="backdrop backdrop--machine ui">
@@ -47,7 +41,6 @@ export function RevealScreen({ game }: { game: Snapshot }) {
         {bot && (
           <ul className="compare step-4" aria-label="The AI against the human average">
             <li><span>Score</span><strong>{bot.score}</strong><em>humans averaged {average(humans, (p) => p.score)}</em></li>
-            <li><span>Turing check</span><strong>{bot.turingScore}</strong><em>humans averaged {average(humans, (p) => p.turingScore)}</em></li>
             <li><span>Humans still standing</span><strong>{survivors.length} of {humans.length}</strong><em>{caught ? 'the AI was voted out' : 'the AI never was'}</em></li>
           </ul>
         )}
@@ -56,15 +49,15 @@ export function RevealScreen({ game }: { game: Snapshot }) {
             <li key={player.id} className={player.isBot ? 'whowas__ai' : ''}><span>{player.name}</span><strong>{player.isBot ? 'the AI' : player.realName || 'Human'}</strong></li>
           ))}
         </ul>
-        <ul className="awards step-5">
-          {awards.filter((award) => award.winner).map((award) => (
-            <li key={award.title} className="award">
-              <h3>{award.title}</h3>
-              <PlayerCard player={{ ...award.winner!, eliminated: false }} selfId={game.selfId} size={72} frame="emote_happy" />
-              <small className="muted">{award.why}</small>
+        {detective && (
+          <ul className="awards step-5">
+            <li className="award">
+              <h3>Sharpest Detective</h3>
+              <PlayerCard player={{ ...detective, eliminated: false }} selfId={game.selfId} size={72} frame="emote_happy" />
+              <small className="muted">Top score among the humans</small>
             </li>
-          ))}
-        </ul>
+          </ul>
+        )}
 
         <div className="row step-6">
           <button className="button button--primary button--big" onClick={leave}>Play again</button>

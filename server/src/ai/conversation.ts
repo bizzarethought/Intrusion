@@ -9,35 +9,34 @@ export function addressesBot(message: string, name: string): boolean {
   return new RegExp(`(?:^|\\W)@?${escaped}(?=$|\\W)`, "i").test(message);
 }
 
+/** Lines for when there is no language model: short and offhand, like someone typing with one thumb. */
 function fallback(context: BotContext, turn: number): string {
-  const reply = context.replyTo;
-  if (!reply) return "anyone have an actual reason for their vote?";
-  const prefix = `${reply.name}, `;
-  const text = reply.message.toLowerCase();
-  if (/stop|react|timing|perfect|fast/.test(text)) return prefix + [
-    "watching the light isn't proof. what else made you suspicious?",
-    "one reaction isn't much to go on. did you notice anything else?",
-    "what about the timing looked off to you?",
-  ][turn % 3];
-  if (/vote|sus|bot|\bai\b|robot/.test(text) || addressesBot(text, context.botName)) {
-    return prefix + [
-      "why me though? give me something besides a hunch",
-      "that's a pretty easy accusation. what did you actually notice?",
-      "i don't think that proves it. anyone else see the same thing?",
-    ][turn % 3];
-  }
-  if (/\?/.test(text)) return prefix + "i'm not sure yet. what are you basing your guess on?";
-  return prefix + "could be, but i'd like more than one clue before voting";
+  const text = context.replyTo?.message.toLowerCase() ?? "";
+  if (/vote|sus|bot|\bai\b|robot/.test(text) || addressesBot(text, context.botName)) return ["why me lol", "nah not me", "ok but based on what", "thats what the bot would say", "bro i literally fell"][turn % 5];
+  if (/\?/.test(text)) return ["idk", "no clue tbh", "couldnt tell you"][turn % 3];
+  return ["lol", "maybe", "could be anyone tbh", "hm", "idk who it is"][turn % 5];
 }
 
-/** One opening comment, then human-triggered replies. No bot-to-bot feedback loop. */
+/** What a model says when it steps out of the game. Posting it would give the AI away. */
+const BREAKS_CHARACTER = /\b(as an ai|language model|ai assistant|i can(?:'|no)?t (?:help|assist|comply)|i'?m sorry, but)\b/i;
+
+/** Brings a reply down to the room's level: the model leans formal even when told not to. */
+function casual(line: string, context: BotContext): string {
+  const others = context.recentChat.filter((chat) => chat.name !== context.botName).map((chat) => chat.message);
+  // Nobody here starts with a capital or ends with a full stop unless the humans do.
+  if (!others.some((message) => /^[A-Z][a-z]/.test(message))) line = line.toLowerCase();
+  if (!others.some((message) => /[a-z]\.$/i.test(message))) line = line.replace(/\.+$/, "");
+  return line;
+}
+
+/** Speaks only when spoken to: human messages trigger replies. No opener, no bot-to-bot feedback loop. */
 export class BotConversation {
   private active = false;
   private generation = 0;
   private sent = 0;
   private dueAt = 0;
   private nextAt = 0;
-  private pending: { reply?: ChatTurn; direct: boolean } | undefined;
+  private pending: { reply: ChatTurn; direct: boolean } | undefined;
   private request: AbortController | undefined;
   private previous = "";
 
@@ -57,8 +56,8 @@ export class BotConversation {
     this.sent = 0;
     this.previous = "";
     this.nextAt = 0;
-    this.pending = { direct: false };
-    this.dueAt = this.now() + 2_000 + this.random() * 2_000;
+    this.pending = undefined; // it waits for someone else to speak first
+    this.dueAt = 0;
   }
 
   stop(): void {
@@ -75,10 +74,9 @@ export class BotConversation {
     // Retain an accusation addressed to us when unrelated chat arrives in a burst.
     if (this.pending?.direct && !direct) return;
     const alreadyWaiting = !!this.pending;
-    const replacingOpener = !!this.pending && !this.pending.reply;
     this.pending = { reply: turn, direct };
     // More incoming messages update context without postponing the reply forever.
-    if (!alreadyWaiting || replacingOpener) this.dueAt = Math.max(this.nextAt, this.now() + 1_200 + this.random() * 1_200);
+    if (!alreadyWaiting) this.dueAt = Math.max(this.nextAt, this.now() + 1_500 + this.random() * 2_500);
   }
 
   tick(endsAt: number, context: () => BotContext, send: (line: string) => void): void {
@@ -104,8 +102,8 @@ export class BotConversation {
     if (!this.active || generation !== this.generation || controller.signal.aborted) return;
     this.request = undefined;
     if (this.now() >= endsAt) return;
-    line = (line ?? "").replace(/\s+/g, " ").trim().slice(0, 240);
-    if (!line || line === this.previous) line = fallback(context, this.sent);
+    line = casual((line ?? "").replace(/\s+/g, " ").trim().slice(0, 240), context);
+    if (!line || line === this.previous || BREAKS_CHARACTER.test(line)) line = fallback(context, this.sent);
     this.previous = line;
     this.sent++;
     this.nextAt = this.now() + GAP_MS;

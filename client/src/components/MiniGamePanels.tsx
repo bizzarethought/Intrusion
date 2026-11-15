@@ -14,9 +14,9 @@ function parseBoard<T>(board: string, fallback: T): T {
 }
 
 /**
- * Pick a Side: the question, with each answer on the side of the screen you walk to for it.
- * Each card has the colour its bank glows in the level. The card for the bank you are standing
- * on is marked, and the middle says what your pick is.
+ * Pick a Side: the question, with each answer on a square sign at the back of its platform, in
+ * the platform's colour. The sign for the platform you are standing on is marked, and the middle
+ * says what your pick is.
  */
 export function SidePanel({ game }: { game: Snapshot }) {
   const { side } = useWorldHud();
@@ -26,7 +26,7 @@ export function SidePanel({ game }: { game: Snapshot }) {
   const watching = Boolean(game.players.find((player) => player.id === game.selfId)?.eliminated);
   const option = (key: 'a' | 'b', text: string, count = 0) => (
     <p className={`sides__option sides__option--${key}${side === key ? ' sides__option--here' : ''}${winner === key ? ' sides__option--won' : ''}`}>
-      <small>{key === 'a' ? '\u25C0 Red bank, on the left' : 'Blue bank, on the right \u25B6'}</small>
+      <small>{key === 'a' ? 'Red' : 'Blue'}</small>
       {text}
       {decided && <strong>{count}</strong>}
       {side === key && <span className="sides__here">You are here</span>}
@@ -39,7 +39,7 @@ export function SidePanel({ game }: { game: Snapshot }) {
         <h2 className="sides__question">{game.prompt}</h2>
         {!watching && (
           <p className={`sides__status${side ? '' : ' sides__status--none'}`}>
-            {side ? `Your pick: ${side === 'a' ? game.optionA : game.optionB}` : 'No pick yet. Walk to a bank.'}
+            {side ? `Your pick: ${side === 'a' ? game.optionA : game.optionB}` : 'No pick yet. Walk to red or blue.'}
           </p>
         )}
       </div>

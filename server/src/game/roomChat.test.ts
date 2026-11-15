@@ -23,7 +23,7 @@ function setup() {
   const bot = new PlayerState(); bot.id = "bot"; bot.displayName = "Sam";
   room.state.players.set(human.id, human); room.state.players.set(bot.id, bot);
   internal.botId = bot.id; room.state.round = 1; room.state.votesRemaining = 2;
-  room.state.phase = "turing-check";
+  room.state.phase = "minigame";
   const messages: Array<{ playerId: string; message: string }> = [];
   room.broadcast = ((_type: unknown, message: { playerId: string; message: string }) => messages.push(message)) as typeof room.broadcast;
   internal.advancePhase(); internal.bot.voteAt = Infinity;

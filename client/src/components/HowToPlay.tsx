@@ -24,7 +24,6 @@ export function HowToPlay({ onClose }: { onClose: () => void }) {
         <ul className="slips">
           <li>Vote out the AI and the humans win. If it survives every vote, it wins.</li>
           <li>Robot looks are different on every screen, so "I'm the blue one" proves nothing.</li>
-          <li>A surprise reaction test can interrupt a game. It gives clues, not proof.</li>
         </ul>
       </div>
     </div>

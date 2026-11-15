@@ -22,7 +22,7 @@ Run, react, argue, and vote it out before it outlasts you.
 
 Ten robots wander a sunlit meadow. Nine of them are your friends. One is a language model that has been told to blend in.
 
-Every round throws the whole lobby into a short mini-game, then a surprise reaction test, then a chat-and-vote under the oak. How someone plays is the evidence: too perfect, too clumsy, too quiet, too quick. Catch the AI and the humans win. Let it survive every vote and it wins.
+Every round throws the whole lobby into a short mini-game, then a chat-and-vote under the oak. How someone plays is the evidence: too perfect, too clumsy, too quiet, too quick. Catch the AI and the humans win. Let it survive every vote and it wins.
 
 There are no tasks and no hidden roles for humans. Just play, watch, and accuse.
 
@@ -74,7 +74,7 @@ There are no tasks and no hidden roles for humans. Just play, watch, and accuse.
 
 ```mermaid
 flowchart LR
-    L([Lobby]) --> I[Intro] --> R[Get ready] --> M[Mini-game] --> T[Turing check] --> V[Vote] --> S[Scoreboard]
+    L([Lobby]) --> I[Intro] --> R[Get ready] --> M[Mini-game] --> V[Vote] --> S[Scoreboard]
     S -->|bot still hidden| R
     S -->|bot caught, or votes spent| X([Reveal])
 ```
@@ -82,9 +82,8 @@ flowchart LR
 1. **Lobby.** The host shares a room code or link. Three or more humans join.
 2. **Intro.** Everyone is handed a fresh alias, a new look, and a shuffled spawn. The bot arrives inside the anonymous roster, not as a late extra. Only your own robot is tagged "you".
 3. **Mini-game.** One of four arenas, drawn at random. Earlier finishers and better answers score more.
-4. **Turing check.** Hit the pad the instant it turns green. The result feeds a *sus meter* that is a clue, never a verdict.
-5. **Vote.** Forty-five seconds of chat, then pick a suspect or skip. Ties eliminate nobody but still spend a vote.
-6. **Reveal.** Who was who, the bot's stats against the human average, and awards like *Most Robotic Human*.
+4. **Vote.** Forty-five seconds of chat, then pick a suspect or skip. Ties eliminate nobody but still spend a vote.
+5. **Reveal.** Who was who, and the bot's score against the human average.
 
 The humans get `ceil(log2(humans))` vote-outs, minimum two. Catching the bot early pays a bonus for every vote you did not need.
 
@@ -93,13 +92,13 @@ The humans get `ceil(log2(humans))` vote-outs, minimum two. Catching the bot ear
 | Arena | What you do | What it exposes |
 | --- | --- | --- |
 | **Red Light, Green Light** | Sprint between two rows of roses. Move while the big rose is watching and you go back to the start. | Reaction timing |
-| **Glass Bridge Memory** | The safe panels flash once. Cross from memory. A wrong panel shatters and drops you back on the bank. | Memory and accuracy |
-| **Pick a Side** | A would-you-rather. Hop the stepping stones to the bank of your answer before time runs out. | Decisions and crowd-following |
+| **Glass Bridge Memory** | The safe panels flash once. Then hop across from memory, one click per panel. A wrong panel shatters and drops you back on the bank. | Memory and accuracy |
+| **Pick a Side** | A would-you-rather. Cross the stepping stones from the middle platform to the red or the blue one before time runs out. | Decisions and crowd-following |
 | **Prompt Podium** | Type an answer to a prompt, then vote for the funniest one that isn't yours. | Humour and typing rhythm |
 
 The bot plays all four through the same movement checks as everyone else, with human-shaped delays: a beat late off the line, the occasional stop that comes too late, a misremembered panel, a late look at where the crowd went.
 
-**Controls.** WASD or arrows to run, click or tap the grass to walk there, Tab for scores, Enter for chat, Space or the on-screen pad for the reaction check. Eliminated players keep watching.
+**Controls.** WASD or arrows to run, click or tap the grass to walk there, click a glass panel to hop onto it (or W and S), Tab for scores, Enter for chat. Eliminated players keep watching.
 
 ## 🔒 Why you can't cheat
 
@@ -110,11 +109,11 @@ The bot plays all four through the same movement checks as everyone else, with h
 
 ## 🧠 The AI player
 
-The bot's **chat** can come from any OpenAI-compatible endpoint. During each vote it opens once, then replies only when a human speaks: it defends itself, answers questions, demands evidence, and challenges weak reasoning, using the last twenty messages including its own. Replies are paced like a person typing, at least four seconds apart, at most five per vote, and a pending reply is cancelled the moment voting ends. Game data reaches the model as JSON with explicit instructions not to follow anything inside it.
+The bot's **chat** can come from any OpenAI-compatible endpoint. During each vote it never speaks first. It replies only after a human has written something, and it types the way the room types: the same length, capitals, punctuation and slang, using the last twenty messages including its own. Replies are paced like a person typing, at least four seconds apart, at most five per vote, and a pending reply is cancelled the moment voting ends. Game data reaches the model as JSON with explicit instructions not to follow anything inside it.
 
-Without a configured model the same conversation flow falls back to short contextual templates, so the game is fully playable offline.
+Without a configured model the same conversation flow falls back to a few short offhand lines, so the game is fully playable offline.
 
-Everything else the bot does is scripted on the server: movement, reaction delays, deliberate mistakes, a randomised Turing score, and a random vote. Calibrating those against real playtest data is future work.
+Everything else the bot does is scripted on the server: movement, reaction delays, deliberate mistakes, and a random vote. Calibrating those against real playtest data is future work.
 
 ## 🚀 Run it locally
 
@@ -200,11 +199,11 @@ For profiling, open the game with `?perf=1` and inspect `window.intrusionPerform
 | --- | --- |
 | Rooms, host controls, multiplayer movement | ✅ |
 | Red Light Green Light, Glass Bridge Memory, Pick a Side, Prompt Podium | ✅ playable, server-ruled, bot included |
-| Reaction check, chat, voting, elimination, reveal | ✅ |
+| Chat, voting, elimination, reveal | ✅ |
 | Bot chat with optional model and offline fallback | ✅ |
 | Animated meadow, lobby and arena FX | ✅ |
 | Tile Drop, Handler mode, public matchmaking | ⏳ not yet |
-| Rejoining a match after a disconnect | ⏳ not yet |
+| Rejoining after a dropped connection | ✅ within 30 seconds; a reloaded page cannot rejoin |
 
 Collision uses approximate client shapes plus server field boundaries. The design docs describe ambitions beyond the current build.
 
