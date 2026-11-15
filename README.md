@@ -1,168 +1,222 @@
-# Intrusion
+<div align="center">
 
-> **Can you catch the AI before it catches you?**
+<img src="elements/levels/example_sprites_on_bridge.png" alt="Robots lined up on the bank of the glass bridge" width="100%" />
 
-Intrusion is our Emory Hacks multiplayer party game for **3–10 human players
-plus one hidden bot**. Compete in Red Light, Green Light, compare reactions,
-discuss suspicious behavior, and vote out the AI before it survives every vote.
+# INTRUSION
 
-The world has a rendered 3D look: Blender backgrounds and animated robot
-sprites are drawn in a 2D GPU scene, with React handling the interface.
+### Everyone is playing. One of them is an AI.
 
-## Play the current demo
+**A browser party game for 3 to 10 friends and one hidden bot.**
+Run, react, argue, and vote it out before it outlasts you.
 
-1. Create a private room and share its room code or link.
-2. At least three humans join; the host starts the match. For a local test,
-   use three browser tabs with different display names. During the intro,
-   everyone receives a fresh alias, appearance assignment, and shuffled spawn
-   position. The AI appears with the complete anonymous roster, rather than
-   as one recognizable late arrival. Only your own character is marked “you.”
-3. After the intro and a short ready phase, run on green and freeze on red.
-   Moving on red sends you back to the start. Earlier finishers earn more points.
-4. Complete a reaction check, chat, and vote for the suspected bot or skip.
-   Ties eliminate nobody, but still use a vote round.
-5. Catch the bot to win. Otherwise, another round begins until the bot wins
-   by surviving the vote budget or leaving only one human in play.
+[![Play now](https://img.shields.io/badge/play-play--intrusion.us-e5303c?style=for-the-badge)](https://play-intrusion.us)
+[![Built at Emory Hacks 2026](https://img.shields.io/badge/Emory%20Hacks-2026-4f7a2e?style=for-the-badge)](#)
 
-**Controls:** WASD or arrow keys to move, click/tap the ground to walk to a
-point, Tab for scores, and Space or the on-screen pad for the reaction check.
-Eliminated players can watch. Play again returns to the menu to create or join
-a new room. Aliases stay stable across mini-games and votes so you can build
-suspicion. The final reveal shows who was who; each new match reshuffles the
-identities again. Lobby-to-match identity mappings remain private on the server.
+![Tests](https://img.shields.io/badge/tests-35%20passing-9bcb52?style=for-the-badge)
 
-## Run locally
+</div>
 
-Requires **Node.js 22.12 or newer**, npm, and a browser with WebGL support.
-Run these commands from the repository root:
+---
+
+## 🌹 The pitch
+
+Ten robots wander a sunlit meadow. Nine of them are your friends. One is a language model that has been told to blend in.
+
+Every round throws the whole lobby into a short mini-game, then a surprise reaction test, then a chat-and-vote under the oak. How someone plays is the evidence: too perfect, too clumsy, too quiet, too quick. Catch the AI and the humans win. Let it survive every vote and it wins.
+
+There are no tasks and no hidden roles for humans. Just play, watch, and accuse.
+
+## 🛠️ Tech stack
+
+<div align="center">
+
+[![Stack](https://skillicons.dev/icons?i=ts,react,nodejs,vite,html,css,blender,aws,nginx,git,github&perline=11)](https://skillicons.dev)
+
+<br/>
+
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
+![React](https://img.shields.io/badge/React_19-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
+![PixiJS](https://img.shields.io/badge/PixiJS_8-E72264?style=for-the-badge&logo=pixijs&logoColor=white)
+![Colyseus](https://img.shields.io/badge/Colyseus_0.16-2A93C6?style=for-the-badge)
+![Node.js](https://img.shields.io/badge/Node.js_22-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)
+![Vite](https://img.shields.io/badge/Vite_8-646CFF?style=for-the-badge&logo=vite&logoColor=white)
+![Blender](https://img.shields.io/badge/Blender-E87D0D?style=for-the-badge&logo=blender&logoColor=white)
+![AWS Lightsail](https://img.shields.io/badge/AWS_Lightsail-232F3E?style=for-the-badge&logo=amazonwebservices&logoColor=FF9900)
+![Nginx](https://img.shields.io/badge/Nginx-009639?style=for-the-badge&logo=nginx&logoColor=white)
+![OpenAI API](https://img.shields.io/badge/OpenAI--compatible_LLM-412991?style=for-the-badge&logo=openai&logoColor=white)
+
+</div>
+
+| | Frontend | Backend | Art & infra |
+| --- | --- | --- | --- |
+| **Language** | TypeScript, strict | TypeScript, strict | Blender source in `art/`, exports in `elements/` |
+| **Core** | React 19 for UI, PixiJS 8 on WebGL for the world | Node 22, Colyseus 0.16 rooms and schema | Blender renders every level and robot |
+| **Tooling** | Vite 8, node:test | tsx, node:test | pm2, nginx, certbot on one AWS Lightsail box |
+| **AI** | | Any OpenAI-compatible chat endpoint, AMD-hosted in our demo | |
+
+## 🤖 Meet the cast
+
+<div align="center">
+<img src="docs/images/player_lineup_preview.png" alt="The ten robot looks: original, crimson, cobalt, lime, sunflower, bubblegum, violet, snow, tangerine and teal" width="100%" />
+<br/><sub>Ten looks, modelled and rendered in Blender. Every player sees a <em>different</em> shuffle of them, so "I'm the green one" proves nothing.</sub>
+</div>
+
+<br/>
+
+<table align="center">
+<tr>
+<td align="center"><img src="docs/images/_preview_walk.gif" alt="Walk cycle" height="200" /><br/><sub>Walk cycles in four directions</sub></td>
+<td align="center"><img src="docs/images/expressions_preview.png" alt="Expressions" height="200" /><br/><sub>Blink, happy, angry, sus, and voted out</sub></td>
+</tr>
+</table>
+
+## 🎮 How a match flows
+
+```mermaid
+flowchart LR
+    L([Lobby]) --> I[Intro] --> R[Get ready] --> M[Mini-game] --> T[Turing check] --> V[Vote] --> S[Scoreboard]
+    S -->|bot still hidden| R
+    S -->|bot caught, or votes spent| X([Reveal])
+```
+
+1. **Lobby.** The host shares a room code or link. Three or more humans join.
+2. **Intro.** Everyone is handed a fresh alias, a new look, and a shuffled spawn. The bot arrives inside the anonymous roster, not as a late extra. Only your own robot is tagged "you".
+3. **Mini-game.** One of four arenas, drawn at random. Earlier finishers and better answers score more.
+4. **Turing check.** Hit the pad the instant it turns green. The result feeds a *sus meter* that is a clue, never a verdict.
+5. **Vote.** Forty-five seconds of chat, then pick a suspect or skip. Ties eliminate nobody but still spend a vote.
+6. **Reveal.** Who was who, the bot's stats against the human average, and awards like *Most Robotic Human*.
+
+The humans get `ceil(log2(humans))` vote-outs, minimum two. Catching the bot early pays a bonus for every vote you did not need.
+
+## 🏟️ The arenas
+
+| Arena | What you do | What it exposes |
+| --- | --- | --- |
+| **Red Light, Green Light** | Sprint between two rows of roses. Move while the big rose is watching and you go back to the start. | Reaction timing |
+| **Glass Bridge Memory** | The safe panels flash once. Cross from memory. A wrong panel shatters and drops you back on the bank. | Memory and accuracy |
+| **Pick a Side** | A would-you-rather. Hop the stepping stones to the bank of your answer before time runs out. | Decisions and crowd-following |
+| **Prompt Podium** | Type an answer to a prompt, then vote for the funniest one that isn't yours. | Humour and typing rhythm |
+
+The bot plays all four through the same movement checks as everyone else, with human-shaped delays: a beat late off the line, the occasional stop that comes too late, a misremembered panel, a late look at where the crowd went.
+
+**Controls.** WASD or arrows to run, click or tap the grass to walk there, Tab for scores, Enter for chat, Space or the on-screen pad for the reaction check. Eliminated players keep watching.
+
+## 🔒 Why you can't cheat
+
+- **Identities are rebuilt at match start.** Every lobby player object is thrown away and replaced with a fresh id and alias. The host flag is erased. Each client learns its own new id through a private message. Lobby-to-match mappings never leave the server.
+- **Looks are client-side.** Each browser shuffles the ten robots by its own session, so friends on the same couch cannot coordinate by colour.
+- **The bot flag is never on the wire** until the reveal phase, and the client's protocol layer strips it before then anyway.
+- **The server owns the rules.** Movement is speed-clamped, the light is decided server-side, chat is rate-limited, and the bot always casts a vote so a missing one can't give it away.
+
+## 🧠 The AI player
+
+The bot's **chat** can come from any OpenAI-compatible endpoint. During each vote it opens once, then replies only when a human speaks: it defends itself, answers questions, demands evidence, and challenges weak reasoning, using the last twenty messages including its own. Replies are paced like a person typing, at least four seconds apart, at most five per vote, and a pending reply is cancelled the moment voting ends. Game data reaches the model as JSON with explicit instructions not to follow anything inside it.
+
+Without a configured model the same conversation flow falls back to short contextual templates, so the game is fully playable offline.
+
+Everything else the bot does is scripted on the server: movement, reaction delays, deliberate mistakes, a randomised Turing score, and a random vote. Calibrating those against real playtest data is future work.
+
+## 🚀 Run it locally
+
+You need **Node.js 22.12 or newer**, npm, and a browser with WebGL.
 
 ```bash
 npm --prefix server ci
 npm --prefix client ci
 ```
 
-Start the game server in one terminal:
+Two terminals, from the repository root:
 
 ```bash
-npm --prefix server run dev
+npm --prefix server run dev     # game server on :2567
+npm --prefix client run dev     # frontend on http://localhost:5173
 ```
 
-Start the frontend in a second terminal:
+Open three tabs with different display names to test a match alone. Client changes hot-reload. Restarting the backend disconnects running matches, so create a new room afterwards.
 
-```bash
-npm --prefix client run dev
-```
+**Phones on the same Wi-Fi:** start the frontend with `npm --prefix client run dev -- --host 0.0.0.0` and open the network URL Vite prints. The client connects to port 2567 on whatever hostname served the page.
 
-Open **http://localhost:5173**. The backend listens on port **2567** by default.
-Keep both terminals running. Client changes reload automatically; a backend
-restart disconnects existing matches, so create a new room afterward.
+<details>
+<summary><strong>Optional: plug in a language model</strong></summary>
 
-For devices on the same Wi-Fi, start the frontend with
-`npm --prefix client run dev -- --host 0.0.0.0` and open the network URL Vite
-prints. The client connects to port 2567 on the page's hostname by default.
-
-## Optional AI configuration
-
-The demo works without an AI service: the bot uses simple contextual chat replies.
-To generate its voting-discussion chat with an OpenAI-compatible endpoint,
-create `server/.env` using `server/.env.example` as a template:
+Copy `server/.env.example` to `server/.env`:
 
 ```dotenv
 PORT=2567
-AI_BASE_URL=https://your-model-server.example/v1
+AI_BASE_URL=https://your-model-server.example/v1   # the backend appends /chat/completions
 AI_API_KEY=your-key
 AI_MODEL=your-model-name
+MINI_GAMES=                                        # optional fixed order, e.g. glass-bridge-memory,prompt-podium
 ```
 
-`AI_BASE_URL` is the API prefix; the backend appends `/chat/completions`.
-An AMD-hosted model can be used through this interface. Missing configuration,
-failed requests, and timeouts use the built-in fallback.
+An AMD-hosted model works through this interface. Missing config, failed requests, and slow responses all fall back to the built-in lines. Requests time out after six seconds so a slow model never holds up the game.
 
-During voting, the bot can defend itself, answer questions, challenge accusations,
-and follow up using the last 20 chat messages, including its own replies. Direct
-mentions take priority. Responses have a short thinking delay and at least four
-seconds between messages, with at most five messages per voting round. Pending
-replies are canceled when voting ends. Without a configured model, the same
-conversation flow uses simple contextual templates rather than a full debate.
+</details>
 
-The model currently generates **chat only**. The server scripts the bot's
-movement, reaction delays, occasional mistakes, and random votes. The bot's
-reaction-check score is randomized. Human playtest-based calibration remains
-future work. Hidden bot identity stays server-side until the final reveal.
+<details>
+<summary><strong>Optional: separate backend host</strong></summary>
 
-For a separate backend host, set `VITE_BACKEND_URL` in `client/.env` using
-`client/.env.example` as a template. Use a hostname reachable by the players'
-devices; `localhost` on a phone points to the phone itself.
+Copy `client/.env.example` to `client/.env` and set `VITE_BACKEND_URL` to a `ws://` or `wss://` address the players' devices can reach. `localhost` on a phone points at the phone.
 
-## Implementation status
+</details>
 
-| Feature | Current status |
+## 🧱 Under the hood
+
+| Layer | What |
 | --- | --- |
-| Rooms, host controls, multiplayer movement | Implemented with Colyseus |
-| Red Light, Green Light | Playable, with server movement checks and scoring |
-| Reaction checks, chat, voting, elimination, reveal | Implemented |
-| Bot chat | Paced back-and-forth during voting; optional model endpoint with contextual fallback |
-| Main screen and lobby | Animated water, foliage, pollen, two static roses, and one opening/closing rose |
-| Arena rose | Opening/closing FX frames follow the server's red/green signal |
-| Glass Bridge, Prompt Podium, Pick a Side | Artwork and client mappings exist; game rules are not implemented |
-| Tile Drop, Handler mode, public matchmaking | Not implemented |
-| Rejoining an active match | Not implemented |
-
-The ready phase places players in the arena; there is no playable travel map.
-Collision uses approximate client shapes and server field boundaries. Design
-and feasibility documents include planned features beyond the current demo.
-
-## Stack and layout
-
-| Layer | Technology |
-| --- | --- |
-| Interface | React and TypeScript |
-| Game rendering | PixiJS/WebGL, sprite atlases, pre-rendered Blender levels |
-| Development and frontend build | Vite |
-| Multiplayer backend | Node.js, TypeScript, Colyseus |
-| AI chat | Optional OpenAI-compatible HTTP endpoint |
-| State | In memory; no database required |
+| Interface | React 19, TypeScript, one `useSyncExternalStore` snapshot per state change |
+| World | PixiJS 8 on WebGL: pre-rendered Blender levels, depth-sorted sprite sheets, foreground occluders, a camera that follows you |
+| Scenery | Animated water, swaying foliage, drifting pollen, and a rose that opens and closes on the server's signal |
+| Networking | Colyseus rooms, 20 Hz patches, local prediction, remote interpolation 100 ms behind arrival |
+| Server | Node, TypeScript, one phase machine, four mini-games behind a shared interface |
+| AI | Optional OpenAI-compatible HTTP endpoint, with contextual fallbacks |
+| State | In memory. No database. |
 
 ```text
-client/      Interface, renderer, network client, and public runtime assets
-server/      Rooms, game rules, state, timers, and AI chat client
-elements/    Source sprite, level, and FX exports
-art/         Blender source assets
-docs/        Design, art handoff, and performance notes
+client/      React UI, PixiJS renderer, Colyseus client, public runtime assets
+server/      Rooms, phase machine, mini-games, rules, AI chat client
+elements/    Source sprite, level and FX exports
+art/         Blender source
+docs/        Design decisions, art handoff, performance notes, deploy guide
+deploy/      Scripts and nginx config for the single-box AWS setup
 ```
 
-The animation loop updates sprites outside React. Remote movement interpolates
-between network snapshots; local movement is predicted immediately. Shared GPU
-textures, cached labels, a 1.5× resolution cap, and scenery limits keep rendering
-lightweight. Reduced-motion settings stop ambient scenery and hold the idle
-rose open. No real-time 3D lighting or physics engine is used.
+The animation loop runs outside React, so movement never re-renders the UI. Shared GPU textures, cached labels, a 1.5× resolution cap, and foliage budgets keep it light on laptops and phones. Reduced-motion settings stop the ambient scenery.
 
-## Checks and builds
-
-From the repository root:
+## ✅ Checks and builds
 
 ```bash
-npm --prefix client run check
-npm --prefix client test
-npm --prefix client run build
-npm --prefix server run check
-npm --prefix server test
-npm --prefix server run build
+npm --prefix client run check && npm --prefix client test && npm --prefix client run build
+npm --prefix server run check && npm --prefix server test && npm --prefix server run build
 ```
 
-These produce `client/dist` and `server/dist`. A production setup must serve
-the frontend and run the backend; previewing the frontend alone does not start
-a multiplayer server. The compiled backend starts with
-`npm --prefix server start`.
+Server tests cover vote rules, identity scrubbing, mini-game geometry, and the bot's conversation pacing. Client tests cover state mapping, interpolation, FX maths, and sprite mirroring.
 
-For local profiling, add `?perf=1` to the game URL and inspect
-`window.intrusionPerformance`, `window.intrusionFx`, and
-`window.intrusionPlayers()` in browser DevTools. See the performance notes for
-measurement limits and browser verification steps.
+For profiling, open the game with `?perf=1` and inspect `window.intrusionPerformance`, `window.intrusionFx`, and `window.intrusionPlayers()` in DevTools. See [performance.md](./docs/performance.md) for what each number means and what it does not.
 
-## Project docs
+## 📍 Status
 
-- [Performance, FX, and profiling](./docs/performance.md)
+| Feature | State |
+| --- | --- |
+| Rooms, host controls, multiplayer movement | ✅ |
+| Red Light Green Light, Glass Bridge Memory, Pick a Side, Prompt Podium | ✅ playable, server-ruled, bot included |
+| Reaction check, chat, voting, elimination, reveal | ✅ |
+| Bot chat with optional model and offline fallback | ✅ |
+| Animated meadow, lobby and arena FX | ✅ |
+| Tile Drop, Handler mode, public matchmaking | ⏳ not yet |
+| Rejoining a match after a disconnect | ⏳ not yet |
+
+Collision uses approximate client shapes plus server field boundaries. The design docs describe ambitions beyond the current build.
+
+## 📚 Docs
+
+- [Design decisions](./docs/decisions.md), with the reasoning behind each one
+- [Feasibility study](./docs/feasibility_study.md), the original design
 - [Art and frontend handoff](./docs/HANDOFF.md)
-- [Feasibility study](./docs/feasibility_study.md)
-- [Design decisions](./docs/decisions.md)
+- [Performance, FX and profiling](./docs/performance.md)
+- [Hosting on AWS](./docs/DEPLOY.md)
+
+<div align="center">
+<br/>
+<sub>Made in a weekend at Emory Hacks 2026. The rose is always watching.</sub>
+</div>
