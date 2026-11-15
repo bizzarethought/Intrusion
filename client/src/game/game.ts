@@ -1,3 +1,4 @@
+import { setBotScale } from './botTransform';
 import { createFx } from './fx';
 import { frameProfiler } from './performance';
 import { Application, Container, Sprite, Texture, Rectangle } from 'pixi.js';
@@ -113,6 +114,14 @@ export async function createGame(canvas: HTMLCanvasElement) {
   });
 
   const bots = new Map<string, Bot>();
+  if (new URLSearchParams(location.search).has('perf')) Object.assign(window, {
+    intrusionPlayers: () => [...bots.values()].map(bot => ({
+      name: bot.name, isSelf: bot.isSelf, x: bot.x, y: bot.y,
+      facing: bot.facing, moving: bot.moving,
+      scaleX: visuals.get(bot)?.body.scale.x, scaleY: visuals.get(bot)?.body.scale.y,
+      frameX: visuals.get(bot)?.body.texture.frame.x, frameY: visuals.get(bot)?.body.texture.frame.y,
+    })),
+  });
   const local: Spot = { x: 0, y: 0 }; // the local player's own position; the server follows it
   let levelKey = '';
   let sendTimer = 0;
@@ -161,7 +170,8 @@ export async function createGame(canvas: HTMLCanvasElement) {
     }
     const length = Math.hypot(dx, dy);
     if (canWalk && length > 0) {
-      const stride = WALK_SPEED * level.pixelsPerMeter * dt;
+      // A click target may be closer than one frame's travel: stop on it, never step past it.
+      const stride = Math.min(WALK_SPEED * level.pixelsPerMeter * dt, walkTarget ? length : Infinity);
       const x = local.x + (dx / length) * stride;
       const y = local.y + (dy / length) * stride * DEPTH_SQUASH;
       // Slide along an edge instead of stopping dead at it.
@@ -211,7 +221,7 @@ export async function createGame(canvas: HTMLCanvasElement) {
     const sheet = botSheet(bot.look);
     if (sheet) {
       const clock = time + bot.offset;
-      const emoting = time < bot.emoteUntil;
+      const emoting = !bot.moving && time < bot.emoteUntil;
       let animation = `${bot.moving ? 'walk' : 'idle'}_${bot.facing}`;
       if (bot.eliminated) animation = 'deactivated';
       else if (emoting) animation = bot.emote;
@@ -231,12 +241,11 @@ export async function createGame(canvas: HTMLCanvasElement) {
         body.texture = texture;
       }
       body.tint = 0xdecfb5;
-      body.width = size; body.height = size;
-      if (bot.flip && bot.facing === 'side' && !bot.eliminated && !emoting) body.scale.x = -Math.abs(body.scale.x);
+      setBotScale(body, size, sheet.cell, bot.flip && bot.facing === 'side' && !bot.eliminated && !emoting);
       body.position.set(bot.x, bot.y - (bot.moving ? Math.abs(Math.sin(clock * 10)) * size * 0.02 : 0));
     } else {
       body.texture = Texture.WHITE; body.tint = variant(bot.look).uiColor;
-      body.width = size * 0.3; body.height = size * 0.5; body.position.set(bot.x, bot.y);
+      body.scale.set(size * 0.3, size * 0.5); body.position.set(bot.x, bot.y);
     }
     const text = bot.isSelf ? `${bot.name} (you)` : bot.name;
     const labelKey = `${text}:${bot.isSelf}`;
@@ -323,7 +332,7 @@ export async function createGame(canvas: HTMLCanvasElement) {
       bot.moving = !fresh && bot.placed && Math.hypot(stepX, stepY) / Math.max(dt, 0.001) > 25;
       bot.placed = true;
       if (bot.moving) {
-        if (Math.abs(stepX) > Math.abs(stepY) * 1.2) { bot.facing = 'side'; bot.flip = stepX < 0; }
+        if (Math.abs(stepX) > Math.abs(stepY / DEPTH_SQUASH) * 1.2) { bot.facing = 'side'; bot.flip = stepX < 0; }
         else bot.facing = stepY > 0 ? 'front' : 'back';
       } else if (!free) bot.facing = 'front'; // gathered round the oak, facing us
     });
